@@ -59,7 +59,7 @@ public struct FileParser: Sendable {
 
         // NOTE: Source is parsed twice — once by SyntaxSparrow above and once here for
         // SourceLocationConverter. SyntaxTree does not expose its internal SourceFileSyntax,
-        // so we cannot reuse it. At <1s for ~300 files this is acceptable for the spike.
+        // so we cannot reuse it.
         let converter = SourceLocationConverter(fileName: file, tree: Parser.parse(source: source))
 
         let declarations = extractChildren(from: tree, file: file, source: source, converter: converter)

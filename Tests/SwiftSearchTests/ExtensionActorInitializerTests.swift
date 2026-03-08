@@ -21,16 +21,15 @@ struct ExtensionActorInitializerTests {
     }
 
     @Test("Extracts extension with extended type as name and conformances")
-    func extractsExtension() {
+    func extractsExtension() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "DeclarationsFixture.swift")
 
         let extensions = overview.declarations.filter { $0.kind == .extension }
         #expect(extensions.count == 2)
 
-        let stringExt = extensions.first { $0.name == "String" }
-        #expect(stringExt != nil)
-        #expect(stringExt!.conformances.contains("CustomPrintable"))
+        let stringExt = try #require(extensions.first { $0.name == "String" })
+        #expect(stringExt.conformances.contains("CustomPrintable"))
     }
 
     @Test("Extension children include member functions and variables")
@@ -47,16 +46,15 @@ struct ExtensionActorInitializerTests {
     }
 
     @Test("Extracts actor with name, conformances, and children")
-    func extractsActor() {
+    func extractsActor() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "DeclarationsFixture.swift")
 
-        let actor = overview.declarations.first { $0.kind == .actor }
-        #expect(actor != nil)
-        #expect(actor!.name == "NetworkManager")
-        #expect(actor!.conformances.contains("Sendable"))
+        let actor = try #require(overview.declarations.first { $0.kind == .actor })
+        #expect(actor.name == "NetworkManager")
+        #expect(actor.conformances.contains("Sendable"))
 
-        let children = actor!.children
+        let children = actor.children
         #expect(children.contains { $0.kind == .variable && $0.name == "requestCount" })
         #expect(children.contains { $0.kind == .function && $0.name == "fetch" })
     }
@@ -74,7 +72,7 @@ struct ExtensionActorInitializerTests {
     }
 
     @Test("SimpleReducer extension is now visible as top-level declaration")
-    func simpleReducerExtensionVisible() {
+    func simpleReducerExtensionVisible() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
@@ -83,8 +81,7 @@ struct ExtensionActorInitializerTests {
         #expect(extensions[0].name == "ItemListReducer")
 
         // The extension's core function should be a child
-        let core = extensions[0].children.first { $0.name == "core" }
-        #expect(core != nil)
-        #expect(core!.kind == .function)
+        let core = try #require(extensions[0].children.first { $0.name == "core" })
+        #expect(core.kind == .function)
     }
 }

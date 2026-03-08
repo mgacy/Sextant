@@ -44,104 +44,90 @@ struct FileParserTests {
     }
 
     @Test("Extracts @Reducer attribute from ItemListReducer")
-    func extractsReducerAttribute() {
+    func extractsReducerAttribute() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" }
-        #expect(reducer != nil)
-        #expect(reducer!.attributes.contains("@Reducer"))
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" })
+        #expect(reducer.attributes.contains("@Reducer"))
     }
 
     @Test("Extracts conformances from ItemListReducer")
-    func extractsConformances() {
+    func extractsConformances() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" }
-        #expect(reducer != nil)
-        #expect(reducer!.conformances.contains("Reducer"))
-        #expect(reducer!.conformances.contains("Sendable"))
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" })
+        #expect(reducer.conformances.contains("Reducer"))
+        #expect(reducer.conformances.contains("Sendable"))
     }
 
     @Test("Extracts nested State struct with @ObservableState attribute")
-    func extractsNestedState() {
+    func extractsNestedState() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" }
-        #expect(reducer != nil)
-
-        let state = reducer!.children.first { $0.name == "State" }
-        #expect(state != nil)
-        #expect(state!.kind == .struct)
-        #expect(state!.attributes.contains("@ObservableState"))
-        #expect(state!.conformances.contains("Equatable"))
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" })
+        let state = try #require(reducer.children.first { $0.name == "State" })
+        #expect(state.kind == .struct)
+        #expect(state.attributes.contains("@ObservableState"))
+        #expect(state.conformances.contains("Equatable"))
     }
 
     @Test("Extracts nested Destination enum with @Reducer attribute")
-    func extractsNestedDestination() {
+    func extractsNestedDestination() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" }
-        #expect(reducer != nil)
-
-        let destination = reducer!.children.first { $0.name == "Destination" }
-        #expect(destination != nil)
-        #expect(destination!.kind == .enum)
-        #expect(destination!.attributes.contains("@Reducer"))
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" })
+        let destination = try #require(reducer.children.first { $0.name == "Destination" })
+        #expect(destination.kind == .enum)
+        #expect(destination.attributes.contains("@Reducer"))
     }
 
     @Test("Extracts nested Action enum with cases")
-    func extractsNestedAction() {
+    func extractsNestedAction() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" }
-        #expect(reducer != nil)
-
-        let action = reducer!.children.first { $0.name == "Action" }
-        #expect(action != nil)
-        #expect(action!.kind == .enum)
-        #expect(action!.conformances.contains("BindableAction"))
-        #expect(action!.conformances.contains("Equatable"))
-        #expect(action!.conformances.contains("Sendable"))
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" })
+        let action = try #require(reducer.children.first { $0.name == "Action" })
+        #expect(action.kind == .enum)
+        #expect(action.conformances.contains("BindableAction"))
+        #expect(action.conformances.contains("Equatable"))
+        #expect(action.conformances.contains("Sendable"))
 
         // Check that it has cases as children
-        let cases = action!.children.filter { $0.kind == .case }
+        let cases = action.children.filter { $0.kind == .case }
         #expect(cases.count >= 4)
         #expect(cases.contains { $0.name == "onAppear" })
         #expect(cases.contains { $0.name == "itemsFetched" })
     }
 
     @Test("Extracts @Dependency variables inside ItemListReducer")
-    func extractsDependencyVariables() {
+    func extractsDependencyVariables() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" }
-        #expect(reducer != nil)
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" })
 
-        let variables = reducer!.children.filter { $0.kind == .variable }
+        let variables = reducer.children.filter { $0.kind == .variable }
         let dependencyVars = variables.filter { $0.attributes.contains("@Dependency") }
         #expect(dependencyVars.count >= 2)
     }
 
     @Test("Extracts Action enum case with Result associated value")
-    func extractsResultAssociatedValue() {
+    func extractsResultAssociatedValue() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" }!
-        let action = reducer.children.first { $0.name == "Action" }!
-        let itemsFetched = action.children.first { $0.name == "itemsFetched" }
-
-        #expect(itemsFetched != nil)
-        #expect(itemsFetched!.kind == .case)
-        #expect(!itemsFetched!.associatedValues.isEmpty)
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" })
+        let action = try #require(reducer.children.first { $0.name == "Action" })
+        let itemsFetched = try #require(action.children.first { $0.name == "itemsFetched" })
+        #expect(itemsFetched.kind == .case)
+        #expect(!itemsFetched.associatedValues.isEmpty)
         // The full declaration should contain the Result type
-        #expect(itemsFetched!.fullDeclaration.contains("Result"))
+        #expect(itemsFetched.fullDeclaration.contains("Result"))
     }
 
     // MARK: - EnumWithAssociatedValues Tests
@@ -159,51 +145,44 @@ struct FileParserTests {
     }
 
     @Test("Extracts enum case with Result generic associated value")
-    func extractsResultGenericCase() {
+    func extractsResultGenericCase() throws {
         let source = fixtureSource("EnumWithAssociatedValues")
         let overview = parser.parseSource(source, file: "EnumWithAssociatedValues.swift")
 
-        let dataEvent = overview.declarations.first { $0.name == "DataEvent" }!
-        let contentFetched = dataEvent.children.first { $0.name == "contentFetched" }
-
-        #expect(contentFetched != nil)
-        #expect(contentFetched!.fullDeclaration.contains("Result<PageContent, AppError>"))
+        let dataEvent = try #require(overview.declarations.first { $0.name == "DataEvent" })
+        let contentFetched = try #require(dataEvent.children.first { $0.name == "contentFetched" })
+        #expect(contentFetched.fullDeclaration.contains("Result<PageContent, AppError>"))
     }
 
     @Test("Extracts enum case with labeled associated values")
-    func extractsLabeledAssociatedValues() {
+    func extractsLabeledAssociatedValues() throws {
         let source = fixtureSource("EnumWithAssociatedValues")
         let overview = parser.parseSource(source, file: "EnumWithAssociatedValues.swift")
 
-        let dataEvent = overview.declarations.first { $0.name == "DataEvent" }!
-        let settingsLoaded = dataEvent.children.first { $0.name == "settingsLoaded" }
-
-        #expect(settingsLoaded != nil)
-        #expect(settingsLoaded!.associatedValues.contains { $0.contains("config") })
-        #expect(settingsLoaded!.associatedValues.contains { $0.contains("isFirstLaunch") })
+        let dataEvent = try #require(overview.declarations.first { $0.name == "DataEvent" })
+        let settingsLoaded = try #require(dataEvent.children.first { $0.name == "settingsLoaded" })
+        #expect(settingsLoaded.associatedValues.contains { $0.contains("config") })
+        #expect(settingsLoaded.associatedValues.contains { $0.contains("isFirstLaunch") })
     }
 
     @Test("Extracts enum case with no payload")
-    func extractsCaseWithNoPayload() {
+    func extractsCaseWithNoPayload() throws {
         let source = fixtureSource("EnumWithAssociatedValues")
         let overview = parser.parseSource(source, file: "EnumWithAssociatedValues.swift")
 
-        let dataEvent = overview.declarations.first { $0.name == "DataEvent" }!
-        let noPayload = dataEvent.children.first { $0.name == "noPayload" }
-
-        #expect(noPayload != nil)
-        #expect(noPayload!.associatedValues.isEmpty)
-        #expect(noPayload!.fullDeclaration == "noPayload")
+        let dataEvent = try #require(overview.declarations.first { $0.name == "DataEvent" })
+        let noPayload = try #require(dataEvent.children.first { $0.name == "noPayload" })
+        #expect(noPayload.associatedValues.isEmpty)
+        #expect(noPayload.fullDeclaration == "noPayload")
     }
 
     @Test("Extracts @CasePathable attribute from NavigationAction")
-    func extractsCasePathable() {
+    func extractsCasePathable() throws {
         let source = fixtureSource("EnumWithAssociatedValues")
         let overview = parser.parseSource(source, file: "EnumWithAssociatedValues.swift")
 
-        let nav = overview.declarations.first { $0.name == "NavigationAction" }
-        #expect(nav != nil)
-        #expect(nav!.attributes.contains("@CasePathable"))
+        let nav = try #require(overview.declarations.first { $0.name == "NavigationAction" })
+        #expect(nav.attributes.contains("@CasePathable"))
     }
 
     // MARK: - Typealias Tests

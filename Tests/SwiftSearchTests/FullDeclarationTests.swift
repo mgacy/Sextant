@@ -23,156 +23,141 @@ struct FullDeclarationTests {
     // MARK: - Functions
 
     @Test("Simple function fullDeclaration")
-    func simpleFunctionDeclaration() {
+    func simpleFunctionDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let simple = overview.declarations.first { $0.name == "simple" }
-        #expect(simple != nil)
-        #expect(simple!.fullDeclaration == "func simple()")
+        let simple = try #require(overview.declarations.first { $0.name == "simple" })
+        #expect(simple.fullDeclaration == "func simple()")
     }
 
     @Test("Static function with params and return type")
-    func staticFunctionDeclaration() {
+    func staticFunctionDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let validate = overview.declarations.first { $0.name == "validate" }
-        #expect(validate != nil)
-        #expect(validate!.fullDeclaration == "static func validate(_ input: String) -> Bool")
+        let validate = try #require(overview.declarations.first { $0.name == "validate" })
+        #expect(validate.fullDeclaration == "static func validate(_ input: String) -> Bool")
     }
 
     @Test("Async throws function with default param")
-    func asyncThrowsFunctionDeclaration() {
+    func asyncThrowsFunctionDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let fetchUser = overview.declarations.first { $0.name == "fetchUser" }
-        #expect(fetchUser != nil)
-        #expect(fetchUser!.fullDeclaration.contains("async"))
-        #expect(fetchUser!.fullDeclaration.contains("throws"))
-        #expect(fetchUser!.fullDeclaration.contains("-> User"))
-        #expect(fetchUser!.fullDeclaration.contains("includeProfile: Bool = true"))
+        let fetchUser = try #require(overview.declarations.first { $0.name == "fetchUser" })
+        #expect(fetchUser.fullDeclaration.contains("async"))
+        #expect(fetchUser.fullDeclaration.contains("throws"))
+        #expect(fetchUser.fullDeclaration.contains("-> User"))
+        #expect(fetchUser.fullDeclaration.contains("includeProfile: Bool = true"))
     }
 
     @Test("Mutating function")
-    func mutatingFunctionDeclaration() {
+    func mutatingFunctionDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let reset = overview.declarations.first { $0.name == "reset" }
-        #expect(reset != nil)
-        #expect(reset!.fullDeclaration == "mutating func reset()")
+        let reset = try #require(overview.declarations.first { $0.name == "reset" })
+        #expect(reset.fullDeclaration == "mutating func reset()")
     }
 
     // MARK: - Variables
 
     @Test("Var with type annotation")
-    func varDeclaration() {
+    func varDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let isLoading = overview.declarations.first { $0.name == "isLoading" }
-        #expect(isLoading != nil)
-        #expect(isLoading!.fullDeclaration == "var isLoading: Bool")
+        let isLoading = try #require(overview.declarations.first { $0.name == "isLoading" })
+        #expect(isLoading.fullDeclaration == "var isLoading: Bool")
     }
 
     @Test("Let with type annotation")
-    func letDeclaration() {
+    func letDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let name = overview.declarations.first { $0.kind == .variable && $0.name == "name" }
-        #expect(name != nil)
-        #expect(name!.fullDeclaration == "let name: String")
+        let name = try #require(overview.declarations.first { $0.kind == .variable && $0.name == "name" })
+        #expect(name.fullDeclaration == "let name: String")
     }
 
     @Test("Static var")
-    func staticVarDeclaration() {
+    func staticVarDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let shared = overview.declarations.first { $0.name == "shared" }
-        #expect(shared != nil)
-        #expect(shared!.fullDeclaration == "static var shared: NetworkManager")
+        let shared = try #require(overview.declarations.first { $0.name == "shared" })
+        #expect(shared.fullDeclaration == "static var shared: NetworkManager")
     }
 
     @Test("Variable with modifier detail (private(set))")
-    func privateSetVarDeclaration() {
+    func privateSetVarDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let count = overview.declarations.first { $0.name == "count" }
-        #expect(count != nil)
-        #expect(count!.fullDeclaration.contains("private(set)"))
-        #expect(count!.fullDeclaration.contains("var count: Int"))
+        let count = try #require(overview.declarations.first { $0.name == "count" })
+        #expect(count.fullDeclaration.contains("private(set)"))
+        #expect(count.fullDeclaration.contains("var count: Int"))
     }
 
     // MARK: - Initializers
 
     @Test("Regular initializer fullDeclaration")
-    func regularInitDeclaration() {
+    func regularInitDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let settings = overview.declarations.first { $0.name == "Settings" }!
+        let settings = try #require(overview.declarations.first { $0.name == "Settings" })
         let inits = settings.children.filter { $0.kind == .initializer }
 
-        let regularInit = inits.first { $0.fullDeclaration.contains("id: UUID") }
-        #expect(regularInit != nil)
-        #expect(regularInit!.fullDeclaration == "init(id: UUID, name: String)")
+        let regularInit = try #require(inits.first { $0.fullDeclaration.contains("id: UUID") })
+        #expect(regularInit.fullDeclaration == "init(id: UUID, name: String)")
     }
 
     @Test("Failable initializer fullDeclaration")
-    func failableInitDeclaration() {
+    func failableInitDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let settings = overview.declarations.first { $0.name == "Settings" }!
+        let settings = try #require(overview.declarations.first { $0.name == "Settings" })
         let inits = settings.children.filter { $0.kind == .initializer }
 
-        let failableInit = inits.first { $0.fullDeclaration.contains("init?") }
-        #expect(failableInit != nil)
-        #expect(failableInit!.fullDeclaration == "init?(rawValue: String)")
+        let failableInit = try #require(inits.first { $0.fullDeclaration.contains("init?") })
+        #expect(failableInit.fullDeclaration == "init?(rawValue: String)")
     }
 
     @Test("Throwing initializer fullDeclaration")
-    func throwingInitDeclaration() {
+    func throwingInitDeclaration() throws {
         let source = fixtureSource("DeclarationsFixture")
         let overview = parser.parseSource(source, file: "test.swift")
 
-        let settings = overview.declarations.first { $0.name == "Settings" }!
+        let settings = try #require(overview.declarations.first { $0.name == "Settings" })
         let inits = settings.children.filter { $0.kind == .initializer }
 
-        let throwingInit = inits.first { $0.fullDeclaration.contains("throws") }
-        #expect(throwingInit != nil)
-        #expect(throwingInit!.fullDeclaration == "public init() throws")
+        let throwingInit = try #require(inits.first { $0.fullDeclaration.contains("throws") })
+        #expect(throwingInit.fullDeclaration == "public init() throws")
     }
 
     // MARK: - SimpleReducer Regression
 
     @Test("SimpleReducer body variable gets fullDeclaration with some keyword")
-    func simpleReducerBodyDeclaration() {
+    func simpleReducerBodyDeclaration() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" && $0.kind == .struct }!
-        let body = reducer.children.first { $0.name == "body" }
-
-        #expect(body != nil)
-        #expect(body!.fullDeclaration.contains("var body"))
-        #expect(body!.fullDeclaration.contains("ReducerOf"))
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" && $0.kind == .struct })
+        let body = try #require(reducer.children.first { $0.name == "body" })
+        #expect(body.fullDeclaration.contains("var body"))
+        #expect(body.fullDeclaration.contains("ReducerOf"))
     }
 
     @Test("SimpleReducer init gets fullDeclaration")
-    func simpleReducerInitDeclaration() {
+    func simpleReducerInitDeclaration() throws {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
 
-        let reducer = overview.declarations.first { $0.name == "ItemListReducer" && $0.kind == .struct }!
-        let initDecl = reducer.children.first { $0.kind == .initializer }
-
-        #expect(initDecl != nil)
-        #expect(initDecl!.fullDeclaration == "public init()")
+        let reducer = try #require(overview.declarations.first { $0.name == "ItemListReducer" && $0.kind == .struct })
+        let initDecl = try #require(reducer.children.first { $0.kind == .initializer })
+        #expect(initDecl.fullDeclaration == "public init()")
     }
 }

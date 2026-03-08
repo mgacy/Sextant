@@ -16,6 +16,7 @@ public struct FileScanner: Sendable {
     public enum Error: Swift.Error, LocalizedError, Sendable {
         case pathNotFound(String)
         case directoryUnreadable(String)
+        case notSwiftFile(String)
 
         public var errorDescription: String? {
             switch self {
@@ -23,6 +24,8 @@ public struct FileScanner: Sendable {
                 "Path does not exist: \(path)"
             case .directoryUnreadable(let path):
                 "Cannot enumerate directory: \(path)"
+            case .notSwiftFile(let path):
+                "Not a Swift file: \(path)"
             }
         }
     }
@@ -53,7 +56,10 @@ public struct FileScanner: Sendable {
         }
 
         if !isDirectory.boolValue {
-            return url.pathExtension == "swift" ? [url.path] : []
+            guard url.pathExtension == "swift" else {
+                throw .notSwiftFile(path)
+            }
+            return [url.path]
         }
 
         return try collectFromDirectory(url)
@@ -85,8 +91,13 @@ private extension FileScanner {
             // Also skip hidden directories (starting with .) that aren't caught by skipsHiddenFiles
             // because skipsHiddenFiles may not cover all cases
             if fileName.hasPrefix(".") {
-                let resourceValues = try? fileURL.resourceValues(forKeys: [.isDirectoryKey])
-                if resourceValues?.isDirectory == true {
+                do {
+                    let resourceValues = try fileURL.resourceValues(forKeys: [.isDirectoryKey])
+                    if resourceValues.isDirectory == true {
+                        enumerator.skipDescendants()
+                        continue
+                    }
+                } catch {
                     enumerator.skipDescendants()
                     continue
                 }

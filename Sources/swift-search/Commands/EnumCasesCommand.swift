@@ -7,7 +7,6 @@
 //
 
 import ArgumentParser
-import Foundation
 import SwiftSearchLib
 
 /// Searches for enum cases, optionally filtering by pattern.
@@ -28,19 +27,8 @@ struct EnumCasesCommand: ParsableCommand {
     var pattern: String?
 
     func run() throws {
-        let scanner = FileScanner()
-        let parser = FileParser()
         let query = StructuralQuery()
-
-        let files = try scanner.collectSwiftFiles(at: path)
-        var overviews: [FileOverview] = []
-        for file in files {
-            do {
-                overviews.append(try parser.parseFile(at: file))
-            } catch {
-                fputs("warning: \(error.localizedDescription)\n", stderr)
-            }
-        }
+        let overviews = try scanAndParse(at: path)
 
         let results: [EnumCaseMatch]
         if let pattern {

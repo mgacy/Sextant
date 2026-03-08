@@ -7,7 +7,6 @@
 //
 
 import ArgumentParser
-import Foundation
 import SwiftSearchLib
 
 /// Looks up a symbol by name with optional kind filtering.
@@ -23,26 +22,14 @@ struct LookupCommand: ParsableCommand {
     @Argument(help: "Symbol name to search for")
     var name: String
 
-    @Option(name: .long, help: "Filter by symbol kind (struct, class, enum, protocol, typealias, function, variable, case)")
+    @Option(name: .long, help: "Filter by symbol kind (struct, class, enum, protocol, typealias, function, variable, case, initializer, extension, actor, macro)")
     var kind: SymbolKind?
 
     @Option(name: .long, help: "Path to scan (default: current directory)")
     var path: String = "."
 
     func run() throws {
-        let scanner = FileScanner()
-        let parser = FileParser()
-
-        let files = try scanner.collectSwiftFiles(at: path)
-        var overviews: [FileOverview] = []
-        for file in files {
-            do {
-                overviews.append(try parser.parseFile(at: file))
-            } catch {
-                fputs("warning: \(error.localizedDescription)\n", stderr)
-            }
-        }
-
+        let overviews = try scanAndParse(at: path)
         let table = SymbolTable(overviews: overviews)
 
         let results: [SymbolEntry]

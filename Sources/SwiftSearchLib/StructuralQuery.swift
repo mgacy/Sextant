@@ -93,7 +93,6 @@ public struct StructuralQuery: Sendable {
             collectEnumCases(
                 from: overview.declarations,
                 file: overview.file,
-                parentEnumName: nil,
                 regex: regex,
                 results: &results
             )
@@ -113,7 +112,6 @@ public struct StructuralQuery: Sendable {
             collectEnumCases(
                 from: overview.declarations,
                 file: overview.file,
-                parentEnumName: nil,
                 regex: nil,
                 results: &results
             )
@@ -150,7 +148,6 @@ public struct StructuralQuery: Sendable {
     private func collectEnumCases(
         from declarations: [Declaration],
         file: String,
-        parentEnumName: String?,
         regex: Regex<AnyRegexOutput>?,
         results: inout [EnumCaseMatch]
     ) {
@@ -181,7 +178,6 @@ public struct StructuralQuery: Sendable {
                 collectEnumCases(
                     from: decl.children.filter { $0.kind != .case },
                     file: file,
-                    parentEnumName: decl.name,
                     regex: regex,
                     results: &results
                 )
@@ -190,7 +186,6 @@ public struct StructuralQuery: Sendable {
                 collectEnumCases(
                     from: decl.children,
                     file: file,
-                    parentEnumName: parentEnumName,
                     regex: regex,
                     results: &results
                 )
