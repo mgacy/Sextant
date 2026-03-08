@@ -9,6 +9,8 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
+        .executable(name: "swift-search", targets: ["swift-search"]),
+        .library(name: "SwiftSearchLib", targets: ["SwiftSearchLib"])
     ],
     dependencies: [
         .package(url: "https://github.com/CheekyGhost-Labs/SyntaxSparrow", from: "6.1.0"),
@@ -17,5 +19,24 @@ let package = Package(
         .package(url: "https://github.com/swiftlang/swift-syntax", from: "601.0.1")
     ],
     targets: [
+        .executableTarget(
+            name: "swift-search",
+            dependencies: [
+                "SwiftSearchLib",
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
+        .target(
+            name: "SwiftSearchLib",
+            dependencies: [
+                .product(name: "SyntaxSparrow", package: "SyntaxSparrow"),
+                .product(name: "SwiftParser", package: "swift-syntax")
+            ]
+        ),
+        .testTarget(
+            name: "SwiftSearchTests",
+            dependencies: ["SwiftSearchLib"],
+            resources: [.copy("Fixtures")]
+        )
     ]
 )
