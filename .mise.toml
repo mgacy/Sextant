@@ -1,0 +1,9 @@
+[tools]
+swiftlint = "0.63.1"
+
+[settings]
+experimental = true
+
+[tasks.lint]
+description = "Lint the code"
+run = "swiftlint"
