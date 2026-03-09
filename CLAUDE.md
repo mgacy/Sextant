@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Sextant is a structural Swift code search CLI tool (`swift-search`) that parses Swift source files using SyntaxSparrow and swift-syntax, providing structured queries beyond what grep or LSP can offer. All output is JSON.
+Sextant is a structural Swift code search CLI tool (`sextant`) that parses Swift source files using SyntaxSparrow and swift-syntax, providing structured queries beyond what grep or LSP can offer. All output is JSON.
 
 ## Build & Test Commands
 
@@ -13,7 +13,7 @@ swift build                    # Build all targets
 swift test                     # Run all tests
 swift test --filter FileParserTests    # Run a specific test suite
 swift test --filter "extractsTopLevelDeclarations"  # Run a single test
-swift run swift-search --help  # Run the CLI
+swift run sextant --help       # Run the CLI
 ```
 
 Linting uses SwiftLint via mise:
@@ -24,9 +24,9 @@ mise run lint                  # Lint the code
 
 ## Architecture
 
-Two targets: an executable (`swift-search`) and a library (`SwiftSearchLib`).
+Two targets: an executable (`sextant`) and a library (`SextantLib`).
 
-### SwiftSearchLib
+### SextantLib
 
 The library handles parsing and querying. **`FileParser` is the isolation boundary for SyntaxSparrow** — no SyntaxSparrow types escape that file. Everything downstream operates on owned value types:
 
@@ -37,7 +37,7 @@ The library handles parsing and querying. **`FileParser` is the isolation bounda
 - **Models** (`FileOverview.swift`, `SymbolEntry.swift`) — `Declaration`, `FileOverview`, `SymbolEntry`, `SymbolKind`. All `Codable`, `Equatable`, `Sendable`.
 - **`@OmitEmpty`** (`OmitEmpty.swift`) — custom property wrapper used on `Declaration` fields to omit empty arrays/strings from JSON output. Uses `EmptyInitializable` protocol + `KeyedEncodingContainer`/`KeyedDecodingContainer` overloads.
 
-### swift-search (CLI)
+### sextant (CLI)
 
 Uses swift-argument-parser with three subcommands:
 
@@ -49,7 +49,7 @@ Uses swift-argument-parser with three subcommands:
 
 ### Test Fixtures
 
-Tests use `.swift` fixture files in `Tests/SwiftSearchTests/Fixtures/` loaded via `Bundle.module`. Test suites: `FileParserTests`, `StructuralQueryTests`, `SymbolTableTests`.
+Tests use `.swift` fixture files in `Tests/SextantTests/Fixtures/` loaded via `Bundle.module`. Test suites: `FileParserTests`, `StructuralQueryTests`, `SymbolTableTests`.
 
 ## Key Dependencies
 

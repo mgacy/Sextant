@@ -7,7 +7,7 @@
 //
 
 import ArgumentParser
-import SwiftSearchLib
+import SextantLib
 
 /// Looks up a symbol by name with optional kind filtering.
 ///

@@ -7,6 +7,6 @@
 //
 
 import ArgumentParser
-import SwiftSearchLib
+import SextantLib
 
 extension SymbolKind: ExpressibleByArgument {}

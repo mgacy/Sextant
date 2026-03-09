@@ -7,7 +7,7 @@
 //
 
 import ArgumentParser
-import SwiftSearchLib
+import SextantLib
 
 /// Searches for enum cases, optionally filtering by pattern.
 ///

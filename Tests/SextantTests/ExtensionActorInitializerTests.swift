@@ -6,7 +6,7 @@
 //  Copyright © 2026 Mathew Gacy. All rights reserved.
 //
 
-@testable import SwiftSearchLib
+@testable import SextantLib
 import Foundation
 import Testing
 

@@ -7,7 +7,7 @@
 //
 
 import ArgumentParser
-import SwiftSearchLib
+import SextantLib
 
 /// Displays a structural overview of declarations in Swift files.
 ///

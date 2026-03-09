@@ -8,7 +8,7 @@
 
 import ArgumentParser
 import Foundation
-import SwiftSearchLib
+import SextantLib
 
 /// Scans and parses all Swift files at the given path.
 ///

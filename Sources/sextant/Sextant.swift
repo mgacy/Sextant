@@ -1,5 +1,5 @@
 //
-//  SwiftSearch.swift
+//  Sextant.swift
 //  Sextant
 //
 //  Created by Mathew Gacy on 3/8/26.
@@ -13,9 +13,9 @@ import ArgumentParser
 /// Parses Swift source files using SyntaxSparrow and provides structured queries that go beyond
 /// what grep or LSP can offer.
 @main
-struct SwiftSearch: ParsableCommand {
+struct Sextant: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "swift-search",
+        commandName: "sextant",
         abstract: "Structural Swift code search",
         version: Version.number,
         subcommands: [
