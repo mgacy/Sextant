@@ -9,22 +9,24 @@
 import ArgumentParser
 import SwiftSearchLib
 
-/// Displays a structural overview of declarations in a Swift file.
+/// Displays a structural overview of declarations in Swift files.
 ///
-/// Parses the file with `FileParser` and outputs a JSON array of declarations including name, kind,
-/// line, attributes, children, and conformances.
+/// Accepts a file or directory path. Parses all Swift files found at the path and outputs a JSON
+/// array of file overviews including file path, declarations with name, kind, line, attributes,
+/// children, and conformances.
 struct OverviewCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "overview",
-        abstract: "Show structural overview of a Swift file"
+        abstract: "Show structural overview of Swift files"
     )
 
-    @Argument(help: "Path to a Swift source file")
-    var file: String
+    @Argument(help: "Path to a Swift file or directory to scan")
+    var path: String
+
+    @OptionGroup var output: OutputOptions
 
     func run() throws {
-        let parser = FileParser()
-        let overview = try parser.parseFile(at: file)
-        try printJSON(overview.declarations)
+        let overviews = try scanAndParse(at: path, relativeTo: output.absolute ? nil : path)
+        try printJSON(overviews, pretty: output.pretty)
     }
 }

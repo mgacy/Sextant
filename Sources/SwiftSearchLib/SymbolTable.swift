@@ -64,6 +64,7 @@ public struct SymbolTable: Sendable {
     private static func indexDeclarations(
         _ declarations: [Declaration],
         file: String,
+        parentName: String = "",
         into entries: inout [String: [SymbolEntry]]
     ) {
         for decl in declarations {
@@ -72,6 +73,8 @@ public struct SymbolTable: Sendable {
                 kind: decl.kind,
                 file: file,
                 line: decl.line,
+                parentName: parentName,
+                fullDeclaration: decl.fullDeclaration,
                 attributes: decl.attributes,
                 conformances: decl.conformances,
                 associatedValues: decl.associatedValues
@@ -80,7 +83,12 @@ public struct SymbolTable: Sendable {
             entries[decl.name, default: []].append(entry)
 
             // Recurse into children
-            indexDeclarations(decl.children, file: file, into: &entries)
+            indexDeclarations(
+                decl.children,
+                file: file,
+                parentName: parentName.isEmpty ? decl.name : "\(parentName).\(decl.name)",
+                into: &entries
+            )
         }
     }
 }

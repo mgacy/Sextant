@@ -197,6 +197,7 @@ public struct StructuralQuery: Sendable {
         ofKind kind: SymbolKind,
         from declarations: [Declaration],
         file: String,
+        parentName: String = "",
         results: inout [SymbolEntry]
     ) {
         for decl in declarations {
@@ -206,6 +207,8 @@ public struct StructuralQuery: Sendable {
                     kind: decl.kind,
                     file: file,
                     line: decl.line,
+                    parentName: parentName,
+                    fullDeclaration: decl.fullDeclaration,
                     attributes: decl.attributes,
                     conformances: decl.conformances,
                     associatedValues: decl.associatedValues
@@ -213,7 +216,13 @@ public struct StructuralQuery: Sendable {
             }
 
             // Recurse into children
-            collectSymbols(ofKind: kind, from: decl.children, file: file, results: &results)
+            collectSymbols(
+                ofKind: kind,
+                from: decl.children,
+                file: file,
+                parentName: parentName.isEmpty ? decl.name : "\(parentName).\(decl.name)",
+                results: &results
+            )
         }
     }
 }

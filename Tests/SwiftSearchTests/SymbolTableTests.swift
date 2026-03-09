@@ -46,7 +46,7 @@ struct SymbolTableTests {
         #expect(typealiases[0].kind == .typealias)
     }
 
-    @Test("Looks up nested symbol by name")
+    @Test("Looks up nested symbol by name with parent context")
     func lookupNestedSymbol() {
         let source = fixtureSource("SimpleReducer")
         let overview = parser.parseSource(source, file: "SimpleReducer.swift")
@@ -56,6 +56,7 @@ struct SymbolTableTests {
         let results = table.lookup(name: "State")
         #expect(results.count >= 1)
         #expect(results.contains { $0.kind == .struct })
+        #expect(results.contains { $0.parentName == "ItemListReducer" })
     }
 
     @Test("Returns empty array for missing symbol")
@@ -112,5 +113,47 @@ struct SymbolTableTests {
         let results = table.lookup(name: "trimmed")
         #expect(results.count == 1)
         #expect(results[0].kind == .function)
+        #expect(results[0].fullDeclaration.contains("trimmed"))
+    }
+
+    @Test("Top-level symbols have empty parentName")
+    func topLevelParentName() {
+        let source = fixtureSource("SimpleReducer")
+        let overview = parser.parseSource(source, file: "SimpleReducer.swift")
+
+        let table = SymbolTable(overviews: [overview])
+
+        let results = table.lookup(name: "ItemListReducer", kind: .struct)
+        #expect(results.count == 1)
+        #expect(results[0].parentName.isEmpty)
+    }
+
+    @Test("Nested symbols include parent name")
+    func nestedSymbolParentName() {
+        let source = fixtureSource("SimpleReducer")
+        let overview = parser.parseSource(source, file: "SimpleReducer.swift")
+
+        let table = SymbolTable(overviews: [overview])
+
+        // Action is nested inside ItemListReducer
+        let actions = table.lookup(name: "Action", kind: .enum)
+        #expect(actions.contains { $0.parentName == "ItemListReducer" })
+
+        // Delegate is nested inside Action (fully-qualified)
+        let delegates = table.lookup(name: "Delegate", kind: .enum)
+        #expect(delegates.contains { $0.parentName == "ItemListReducer.Action" })
+    }
+
+    @Test("Lookup includes full declaration for functions")
+    func lookupIncludesFullDeclaration() {
+        let source = fixtureSource("DeclarationsFixture")
+        let overview = parser.parseSource(source, file: "DeclarationsFixture.swift")
+
+        let table = SymbolTable(overviews: [overview])
+
+        let results = table.lookup(name: "fetchUser", kind: .function)
+        #expect(results.count == 1)
+        #expect(results[0].fullDeclaration.contains("fetchUser"))
+        #expect(results[0].fullDeclaration.contains("UUID"))
     }
 }

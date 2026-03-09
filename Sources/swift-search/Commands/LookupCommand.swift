@@ -28,8 +28,10 @@ struct LookupCommand: ParsableCommand {
     @Option(name: .long, help: "Path to scan (default: current directory)")
     var path: String = "."
 
+    @OptionGroup var output: OutputOptions
+
     func run() throws {
-        let overviews = try scanAndParse(at: path)
+        let overviews = try scanAndParse(at: path, relativeTo: output.absolute ? nil : path)
         let table = SymbolTable(overviews: overviews)
 
         let results: [SymbolEntry]
@@ -39,6 +41,6 @@ struct LookupCommand: ParsableCommand {
             results = table.lookup(name: name)
         }
 
-        try printJSON(results)
+        try printJSON(results, pretty: output.pretty)
     }
 }

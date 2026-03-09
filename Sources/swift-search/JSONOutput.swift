@@ -8,13 +8,15 @@
 
 import Foundation
 
-/// Encodes a value as pretty-printed JSON and prints it to stdout.
+/// Encodes a value as JSON and prints it to stdout.
 ///
-/// - Parameter value: The value to encode.
+/// - Parameters:
+///   - value: The value to encode.
+///   - pretty: If `true`, pretty-prints the JSON output. Defaults to `false`.
 /// - Throws: `EncodingError` if encoding fails.
-func printJSON<T: Encodable>(_ value: T) throws {
+func printJSON<T: Encodable>(_ value: T, pretty: Bool = false) throws {
     let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
     let data = try encoder.encode(value)
     print(String(decoding: data, as: UTF8.self))
 }

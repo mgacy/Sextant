@@ -26,17 +26,26 @@ struct EnumCasesCommand: ParsableCommand {
     @Option(name: .long, help: "Regex pattern to match against full case declaration")
     var pattern: String?
 
+    @Option(name: .long, help: "Filter by enum name (exact match)")
+    var enumName: String?
+
+    @OptionGroup var output: OutputOptions
+
     func run() throws {
         let query = StructuralQuery()
-        let overviews = try scanAndParse(at: path)
+        let overviews = try scanAndParse(at: path, relativeTo: output.absolute ? nil : path)
 
-        let results: [EnumCaseMatch]
+        var results: [EnumCaseMatch]
         if let pattern {
             results = try query.findEnumCases(matching: pattern, in: overviews)
         } else {
             results = query.allEnumCases(in: overviews)
         }
 
-        try printJSON(results)
+        if let enumName {
+            results = results.filter { $0.enumName == enumName }
+        }
+
+        try printJSON(results, pretty: output.pretty)
     }
 }

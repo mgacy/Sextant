@@ -43,6 +43,14 @@ public struct SymbolEntry: Codable, Equatable, Sendable {
     /// The 1-based line number of the declaration.
     public let line: Int
 
+    /// The name of the parent declaration (e.g., "ItemListReducer" for a nested State struct).
+    /// Empty for top-level declarations.
+    @OmitEmpty public var parentName: String
+
+    /// The full serialized declaration (e.g., "func fetchUser(id: UUID) async throws -> User").
+    /// Empty when not applicable.
+    @OmitEmpty public var fullDeclaration: String
+
     /// Attributes applied to the declaration (e.g., "@Reducer", "@ObservableState").
     @OmitEmpty public var attributes: [String]
 
@@ -60,6 +68,8 @@ public struct SymbolEntry: Codable, Equatable, Sendable {
     ///   - kind: The kind of declaration.
     ///   - file: The file path where this symbol is declared.
     ///   - line: The 1-based line number.
+    ///   - parentName: The name of the parent declaration, if nested.
+    ///   - fullDeclaration: The full serialized declaration for pattern matching.
     ///   - attributes: Attributes applied to the declaration.
     ///   - conformances: Protocol conformances.
     ///   - associatedValues: Associated value types for enum cases.
@@ -68,6 +78,8 @@ public struct SymbolEntry: Codable, Equatable, Sendable {
         kind: SymbolKind,
         file: String,
         line: Int,
+        parentName: String = "",
+        fullDeclaration: String = "",
         attributes: [String] = [],
         conformances: [String] = [],
         associatedValues: [String] = []
@@ -76,6 +88,8 @@ public struct SymbolEntry: Codable, Equatable, Sendable {
         self.kind = kind
         self.file = file
         self.line = line
+        self.parentName = parentName
+        self.fullDeclaration = fullDeclaration
         self.attributes = attributes
         self.conformances = conformances
         self.associatedValues = associatedValues

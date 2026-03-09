@@ -15,9 +15,12 @@ import SwiftSearchLib
 /// Logs warnings to stderr for files that fail to parse. Throws `ValidationError`
 /// if all files fail.
 ///
-/// - Parameter path: A file or directory path to scan.
+/// - Parameters:
+///   - path: A file or directory path to scan.
+///   - relativeTo: When provided, file paths in the returned overviews are made relative to this
+///     path. If the path is a directory it is used directly; if a file, its parent directory is used.
 /// - Returns: An array of parsed file overviews.
-func scanAndParse(at path: String) throws -> [FileOverview] {
+func scanAndParse(at path: String, relativeTo basePath: String? = nil) throws -> [FileOverview] {
     let scanner = FileScanner()
     let parser = FileParser()
     let files = try scanner.collectSwiftFiles(at: path)
@@ -42,5 +45,27 @@ func scanAndParse(at path: String) throws -> [FileOverview] {
         )
     }
 
+    if let basePath {
+        let prefix = resolveBasePrefix(basePath)
+        overviews = overviews.map { overview in
+            let relativePath = overview.file.hasPrefix(prefix)
+                ? String(overview.file.dropFirst(prefix.count))
+                : overview.file
+            return FileOverview(file: relativePath, declarations: overview.declarations)
+        }
+    }
+
     return overviews
+}
+
+/// Resolves a path to an absolute directory prefix ending with "/".
+///
+/// - Parameter path: A file or directory path.
+/// - Returns: The resolved directory path with a trailing slash.
+private func resolveBasePrefix(_ path: String) -> String {
+    let url = URL(fileURLWithPath: path).standardized
+    var isDir: ObjCBool = false
+    FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+    let dir = isDir.boolValue ? url.path : url.deletingLastPathComponent().path
+    return dir.hasSuffix("/") ? dir : dir + "/"
 }
