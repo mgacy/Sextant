@@ -18,5 +18,6 @@ func printJSON<T: Encodable>(_ value: T, pretty: Bool = false) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
     let data = try encoder.encode(value)
+    // swiftlint:disable:next optional_data_string_conversion
     print(String(decoding: data, as: UTF8.self))
 }

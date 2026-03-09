@@ -7,3 +7,7 @@ experimental = true
 [tasks.lint]
 description = "Lint the code"
 run = "swiftlint"
+
+[tasks.lint-fix]
+description = "Auto-fix linting issues"
+run = "swiftlint --fix"
