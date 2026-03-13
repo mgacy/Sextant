@@ -20,6 +20,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup Swift
+        uses: swiftlang/setup-swift@v1
+        with:
+          swift-version: '6.2'
+
       - name: Cache dependencies
         uses: actions/cache@v5
         with:

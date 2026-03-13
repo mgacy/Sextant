@@ -9,7 +9,9 @@ DerivedData/
 .netrc
 
 # User-specific configs
+/.claude/rules
 .claude/settings.local.json
+.claude/worktrees
 .claude-tracking
 .env
 .envrc

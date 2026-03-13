@@ -1,5 +1,6 @@
 excluded:
   - .build
+  - .claude/worktrees/*/.build
   - Tests/SextantTests/Fixtures
 
 opt_in_rules:
