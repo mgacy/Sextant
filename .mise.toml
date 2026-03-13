@@ -11,3 +11,12 @@ run = "swiftlint"
 [tasks.lint-fix]
 description = "Auto-fix linting issues"
 run = "swiftlint --fix"
+
+[tasks.build]
+description = "Build release binary"
+run = "swift build -c release"
+
+[tasks.install]
+description = "Build and install sextant to /usr/local/bin"
+depends = ["build"]
+run = "cp .build/release/sextant /usr/local/bin/sextant"
