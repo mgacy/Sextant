@@ -158,7 +158,7 @@ let cases = try query.findEnumCases(matching: "Result<", in: overviews)
 ```bash
 swift build              # Build
 swift test               # Run all tests
-swift run sextant   # Run the CLI
+swift run sextant        # Run the CLI
 mise run lint            # Lint with SwiftLint
 ```
 

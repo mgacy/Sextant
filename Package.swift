@@ -16,6 +16,7 @@ let package = Package(
         .package(url: "https://github.com/CheekyGhost-Labs/SyntaxSparrow", from: "6.1.0"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
         .package(url: "https://github.com/mgacy/swift-version-file-plugin.git", from: "0.2.0"),
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
         .package(url: "https://github.com/swiftlang/swift-syntax", from: "601.0.1")
     ],
     targets: [
