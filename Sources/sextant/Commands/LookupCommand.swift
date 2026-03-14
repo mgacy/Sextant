@@ -13,7 +13,7 @@ import SextantLib
 ///
 /// Scans the given path (or current directory by default) for Swift files, builds a `SymbolTable`,
 /// and looks up the symbol. Outputs JSON results with name, kind, file, line, and attributes.
-struct LookupCommand: ParsableCommand {
+struct LookupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "lookup",
         abstract: "Look up a symbol by name"
@@ -30,8 +30,8 @@ struct LookupCommand: ParsableCommand {
 
     @OptionGroup var output: OutputOptions
 
-    func run() throws {
-        let overviews = try scanAndParse(at: path, relativeTo: output.absolute ? nil : path)
+    func run() async throws {
+        let overviews = try await scanAndParse(at: path, relativeTo: output.absolute ? nil : path)
         let table = SymbolTable(overviews: overviews)
 
         let results: [SymbolEntry]
