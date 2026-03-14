@@ -28,6 +28,11 @@ struct ConcurrencyTests {
         Bundle.module.url(forResource: name, withExtension: "swift", subdirectory: "Fixtures")!.path
     }
 
+    private var fixturesDirectory: String {
+        Bundle.module.url(forResource: "DeclarationsFixture", withExtension: "swift", subdirectory: "Fixtures")!
+            .deletingLastPathComponent().path
+    }
+
     // MARK: - Deterministic Ordering
 
     @Test("Concurrent parsing produces deterministic file-path-sorted order across multiple runs")
@@ -93,14 +98,6 @@ struct ConcurrencyTests {
             #expect(failedPaths.contains(invalidPath), "Expected failure for \(invalidPath)")
         }
 
-        // Verify failures are FileParser.Error instances.
-        for failure in result.failures {
-            #expect(
-                failure.error is FileParser.Error,
-                "Expected FileParser.Error for \(failure.file), got \(type(of: failure.error))"
-            )
-        }
-
         // Verify valid results contain expected declarations — not empty overviews.
         for overview in result.overviews {
             #expect(!overview.declarations.isEmpty, "Expected non-empty declarations for \(overview.file)")
@@ -135,5 +132,47 @@ struct ConcurrencyTests {
         // Empty — should not be allFailed.
         let emptyResult = await parser.parseFiles(atPaths: [])
         #expect(!emptyResult.allFailed)
+    }
+
+    // MARK: - parseFiles(in:)
+
+    @Test("parseFiles(in:) with nonexistent path throws FileScanner.Error.pathNotFound")
+    func parseFilesInNonexistentPath() async throws {
+        await #expect(throws: FileScanner.Error.self) {
+            try await parser.parseFiles(in: "/nonexistent/directory")
+        }
+    }
+
+    @Test("parseFiles(in:) with non-Swift file throws FileScanner.Error.notSwiftFile")
+    func parseFilesInNonSwiftFile() async throws {
+        // Create a temporary non-Swift file.
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let tempFile = tempDir.appendingPathComponent("data.json")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        try "{}".write(to: tempFile, atomically: true, encoding: .utf8)
+
+        await #expect(throws: FileScanner.Error.self) {
+            try await parser.parseFiles(in: tempFile.path)
+        }
+    }
+
+    @Test("parseFiles(in:) with valid directory returns parsed results")
+    func parseFilesInDirectory() async throws {
+        let result = try await parser.parseFiles(in: fixturesDirectory)
+
+        #expect(!result.overviews.isEmpty, "Expected parsed overviews from fixtures directory")
+        #expect(result.failures.isEmpty, "Expected no failures from valid fixtures")
+        #expect(result.overviews.count >= Self.fixtureNames.count)
+    }
+
+    @Test("parseFiles(in:) with single Swift file returns one overview")
+    func parseFilesInSingleFile() async throws {
+        let singleFile = fixturePath("SimpleReducer")
+        let result = try await parser.parseFiles(in: singleFile)
+
+        #expect(result.overviews.count == 1)
+        #expect(result.failures.isEmpty)
+        #expect(!result.overviews[0].declarations.isEmpty)
     }
 }

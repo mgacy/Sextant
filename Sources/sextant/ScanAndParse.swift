@@ -25,8 +25,8 @@ func scanAndParse(at path: String, relativeTo basePath: String? = nil) async thr
     let parser = FileParser()
     let result = try await parser.parseFiles(in: path)
 
-    for (file, error) in result.failures {
-        fputs("warning: failed to parse \(file): \(error.localizedDescription)\n", stderr)
+    for failure in result.failures {
+        fputs("warning: failed to parse \(failure.file): \(failure.error.localizedDescription)\n", stderr)
     }
 
     if !result.failures.isEmpty {

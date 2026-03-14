@@ -6,6 +6,26 @@
 //  Copyright © 2026 Mathew Gacy. All rights reserved.
 //
 
+/// A file that failed to parse.
+public struct ParseFailure: Sendable {
+
+    /// The path to the file that could not be parsed.
+    public let file: String
+
+    /// The error encountered during parsing.
+    public let error: FileParser.Error
+
+    /// Creates a parse failure.
+    ///
+    /// - Parameters:
+    ///   - file: The path to the file that could not be parsed.
+    ///   - error: The error encountered during parsing.
+    public init(file: String, error: FileParser.Error) {
+        self.file = file
+        self.error = error
+    }
+}
+
 /// The result of parsing multiple Swift files concurrently.
 ///
 /// Contains successfully parsed file overviews and any file-level failures.
@@ -16,8 +36,7 @@ public struct ParseResult: Sendable {
     public let overviews: [FileOverview]
 
     /// Files that failed to parse, sorted by file path.
-    /// Each entry contains the file path and the error encountered.
-    public let failures: [(file: String, error: any Error)]
+    public let failures: [ParseFailure]
 
     /// The total number of files that were attempted.
     public var totalCount: Int { overviews.count + failures.count }
@@ -30,7 +49,7 @@ public struct ParseResult: Sendable {
     /// - Parameters:
     ///   - overviews: Successfully parsed file overviews.
     ///   - failures: Files that failed to parse with their errors.
-    public init(overviews: [FileOverview], failures: [(file: String, error: any Error)]) {
+    public init(overviews: [FileOverview], failures: [ParseFailure]) {
         self.overviews = overviews
         self.failures = failures
     }
