@@ -34,44 +34,16 @@ struct ConcurrencyTests {
     func deterministicOrdering() async {
         let fixturePaths = Self.fixtureNames.map { fixturePath($0) }
 
-        // Run the concurrent parse pattern multiple times to verify ordering stability.
+        // Run the concurrent parse multiple times to verify ordering stability.
         var previousOrder: [String]?
 
         for iteration in 0..<10 {
-            let overviews = await withTaskGroup(
-                of: (String, Result<FileOverview, any Error>).self
-            ) { group in
-                for path in fixturePaths {
-                    group.addTask {
-                        do {
-                            return (path, .success(try parser.parseFile(at: path)))
-                        } catch {
-                            return (path, .failure(error))
-                        }
-                    }
-                }
-
-                var collected: [(String, Result<FileOverview, any Error>)] = []
-                collected.reserveCapacity(fixturePaths.count)
-                for await result in group {
-                    collected.append(result)
-                }
-                return collected
-            }
-
-            // Sort by file path — same as scanAndParse does.
-            let sorted = overviews.sorted { $0.0 < $1.0 }
-            let filePaths = sorted.map(\.0)
+            let result = await parser.parseFiles(atPaths: fixturePaths)
 
             // All results should be successes.
-            for (path, result) in sorted {
-                switch result {
-                case .success:
-                    break
-                case .failure(let error):
-                    Issue.record("Unexpected failure for \(path): \(error)")
-                }
-            }
+            #expect(result.failures.isEmpty, "Unexpected failures in iteration \(iteration)")
+
+            let filePaths = result.overviews.map(\.file)
 
             // Verify ordering is identical to the previous iteration.
             if let previous = previousOrder {
@@ -94,7 +66,6 @@ struct ConcurrencyTests {
 
     @Test("Concurrent parsing with invalid paths collects errors without discarding valid results")
     func errorTolerance() async {
-        // swiftlint:disable:previous function_body_length
         let validPaths = Self.fixtureNames.map { fixturePath($0) }
         let invalidPaths = [
             "/nonexistent/path/Missing1.swift",
@@ -102,77 +73,67 @@ struct ConcurrencyTests {
         ]
         let allPaths = validPaths + invalidPaths
 
-        let results = await withTaskGroup(
-            of: (String, Result<FileOverview, any Error>).self
-        ) { group in
-            for path in allPaths {
-                group.addTask {
-                    do {
-                        return (path, .success(try parser.parseFile(at: path)))
-                    } catch {
-                        return (path, .failure(error))
-                    }
-                }
-            }
-
-            var collected: [(String, Result<FileOverview, any Error>)] = []
-            collected.reserveCapacity(allPaths.count)
-            for await result in group {
-                collected.append(result)
-            }
-            return collected
-        }
-
-        // Sort by file path for deterministic processing.
-        let sorted = results.sorted { $0.0 < $1.0 }
-
-        var successes: [FileOverview] = []
-        var failures: [(path: String, error: any Error)] = []
-
-        for (path, result) in sorted {
-            switch result {
-            case .success(let overview):
-                successes.append(overview)
-            case .failure(let error):
-                failures.append((path: path, error: error))
-            }
-        }
+        let result = await parser.parseFiles(atPaths: allPaths)
 
         // All valid fixture files should parse successfully.
         #expect(
-            successes.count == validPaths.count,
-            "Expected \(validPaths.count) successes, got \(successes.count)"
+            result.overviews.count == validPaths.count,
+            "Expected \(validPaths.count) successes, got \(result.overviews.count)"
         )
 
         // All invalid paths should produce failures.
         #expect(
-            failures.count == invalidPaths.count,
-            "Expected \(invalidPaths.count) failures, got \(failures.count)"
+            result.failures.count == invalidPaths.count,
+            "Expected \(invalidPaths.count) failures, got \(result.failures.count)"
         )
 
         // Verify failures are for the invalid paths specifically.
-        let failedPaths = Set(failures.map(\.path))
+        let failedPaths = Set(result.failures.map(\.file))
         for invalidPath in invalidPaths {
-            #expect(
-                failedPaths.contains(invalidPath),
-                "Expected failure for \(invalidPath)"
-            )
+            #expect(failedPaths.contains(invalidPath), "Expected failure for \(invalidPath)")
         }
 
         // Verify failures are FileParser.Error instances.
-        for failure in failures {
+        for failure in result.failures {
             #expect(
                 failure.error is FileParser.Error,
-                "Expected FileParser.Error for \(failure.path), got \(type(of: failure.error))"
+                "Expected FileParser.Error for \(failure.file), got \(type(of: failure.error))"
             )
         }
 
         // Verify valid results contain expected declarations — not empty overviews.
-        for overview in successes {
-            #expect(
-                !overview.declarations.isEmpty,
-                "Expected non-empty declarations for \(overview.file)"
-            )
+        for overview in result.overviews {
+            #expect(!overview.declarations.isEmpty, "Expected non-empty declarations for \(overview.file)")
         }
+    }
+
+    // MARK: - ParseResult Properties
+
+    @Test("ParseResult.totalCount returns sum of successes and failures")
+    func totalCount() async {
+        let validPaths = Self.fixtureNames.map { fixturePath($0) }
+        let invalidPaths = ["/nonexistent/Missing.swift"]
+        let allPaths = validPaths + invalidPaths
+
+        let result = await parser.parseFiles(atPaths: allPaths)
+
+        #expect(result.totalCount == allPaths.count)
+    }
+
+    @Test("ParseResult.allFailed is true only when all files fail")
+    func allFailed() async {
+        // All valid — should not be allFailed.
+        let validPaths = Self.fixtureNames.map { fixturePath($0) }
+        let validResult = await parser.parseFiles(atPaths: validPaths)
+        #expect(!validResult.allFailed)
+
+        // All invalid — should be allFailed.
+        let invalidPaths = ["/nonexistent/A.swift", "/nonexistent/B.swift"]
+        let failedResult = await parser.parseFiles(atPaths: invalidPaths)
+        #expect(failedResult.allFailed)
+
+        // Empty — should not be allFailed.
+        let emptyResult = await parser.parseFiles(atPaths: [])
+        #expect(!emptyResult.allFailed)
     }
 }

@@ -22,15 +22,74 @@ public struct FileParser: Sendable {
 
         public var errorDescription: String? {
             switch self {
-            case let .fileUnreadable(path, underlying):
-                "Cannot read file: \(path) (\(underlying.localizedDescription))"
+            case let .fileUnreadable(path, underlying): "Cannot read file: \(path) (\(underlying.localizedDescription))"
             }
         }
     }
 
     public init() {}
 
-    // MARK: - Public API
+    /// Parses multiple Swift files concurrently.
+    ///
+    /// Files are parsed in parallel using a `TaskGroup`. Results are sorted by file path
+    /// for deterministic output. Parse failures for individual files are collected in the
+    /// result rather than thrown.
+    ///
+    /// - Parameter paths: An array of absolute paths to `.swift` files.
+    /// - Returns: A ``ParseResult`` containing successes and failures, both sorted by file path.
+    public func parseFiles(atPaths paths: [String]) async -> ParseResult {
+        let results = await withTaskGroup(
+            of: (String, Swift.Result<FileOverview, any Swift.Error>).self
+        ) { group in
+            for file in paths {
+                group.addTask {
+                    do {
+                        return (file, .success(try self.parseFile(at: file)))
+                    } catch {
+                        return (file, .failure(error))
+                    }
+                }
+            }
+
+            var collected: [(String, Swift.Result<FileOverview, any Swift.Error>)] = []
+            collected.reserveCapacity(paths.count)
+            for await result in group {
+                collected.append(result)
+            }
+            return collected
+        }
+
+        let sorted = results.sorted { $0.0 < $1.0 }
+
+        var overviews: [FileOverview] = []
+        overviews.reserveCapacity(paths.count)
+        var failures: [(file: String, error: any Swift.Error)] = []
+
+        for (file, result) in sorted {
+            switch result {
+            case .success(let overview):
+                overviews.append(overview)
+            case .failure(let error):
+                failures.append((file: file, error: error))
+            }
+        }
+
+        return ParseResult(overviews: overviews, failures: failures)
+    }
+
+    /// Scans a path for Swift files and parses them concurrently.
+    ///
+    /// If `path` points to a single file, parses just that file. If `path` points to a directory,
+    /// recursively scans for `.swift` files (excluding build artifacts) and parses all of them.
+    ///
+    /// - Parameter path: A file or directory path to scan.
+    /// - Returns: A ``ParseResult`` containing successes and failures.
+    /// - Throws: `FileScanner.Error` if the path does not exist or the directory cannot be enumerated.
+    public func parseFiles(in path: String) async throws(FileScanner.Error) -> ParseResult {
+        let scanner = FileScanner()
+        let files = try scanner.collectSwiftFiles(at: path)
+        return await parseFiles(atPaths: files)
+    }
 
     /// Parses a Swift file at the given path into a `FileOverview`.
     ///

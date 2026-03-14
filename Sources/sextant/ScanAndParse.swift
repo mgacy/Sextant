@@ -22,57 +22,26 @@ import SextantLib
 ///     path. If the path is a directory it is used directly; if a file, its parent directory is used.
 /// - Returns: An array of parsed file overviews.
 func scanAndParse(at path: String, relativeTo basePath: String? = nil) async throws -> [FileOverview] {
-    let scanner = FileScanner()
     let parser = FileParser()
-    let files = try scanner.collectSwiftFiles(at: path)
+    let result = try await parser.parseFiles(in: path)
 
-    let results = await withTaskGroup(of: (String, Result<FileOverview, any Error>).self) { group in
-        for file in files {
-            group.addTask {
-                do {
-                    return (file, .success(try parser.parseFile(at: file)))
-                } catch {
-                    return (file, .failure(error))
-                }
-            }
-        }
-
-        var collected: [(String, Result<FileOverview, any Error>)] = []
-        collected.reserveCapacity(files.count)
-        for await result in group {
-            collected.append(result)
-        }
-        return collected
+    for (file, error) in result.failures {
+        fputs("warning: failed to parse \(file): \(error.localizedDescription)\n", stderr)
     }
 
-    // Sort by file path for deterministic output (matches FileScanner's sort order).
-    let sorted = results.sorted { $0.0 < $1.0 }
-
-    var overviews: [FileOverview] = []
-    overviews.reserveCapacity(files.count)
-    var failureCount = 0
-
-    for (_, result) in sorted {
-        switch result {
-        case .success(let overview):
-            overviews.append(overview)
-        case .failure(let error):
-            fputs("warning: \(error.localizedDescription)\n", stderr)
-            failureCount += 1
-        }
+    if !result.failures.isEmpty {
+        fputs("warning: \(result.failures.count) of \(result.totalCount) files could not be parsed\n", stderr)
     }
 
-    if failureCount > 0 {
-        fputs("warning: \(failureCount) of \(files.count) files could not be parsed\n", stderr)
-    }
-
-    if !files.isEmpty && overviews.isEmpty {
-        throw ValidationError("All \(files.count) files failed to parse. Check file permissions and encoding.")
+    if result.allFailed {
+        throw ValidationError(
+            "All \(result.totalCount) files failed to parse. Check file permissions and encoding."
+        )
     }
 
     if let basePath {
         let prefix = resolveBasePrefix(basePath)
-        return overviews.map { overview in
+        return result.overviews.map { overview in
             let relativePath = overview.file.hasPrefix(prefix)
                 ? String(overview.file.dropFirst(prefix.count))
                 : overview.file
@@ -80,7 +49,7 @@ func scanAndParse(at path: String, relativeTo basePath: String? = nil) async thr
         }
     }
 
-    return overviews
+    return result.overviews
 }
 
 /// Resolves a path to an absolute directory prefix ending with "/".
