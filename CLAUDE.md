@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Sextant is a structural Swift code search CLI tool (`sextant`) that parses Swift source files using SyntaxSparrow and swift-syntax, providing structured queries beyond what grep or LSP can offer. All output is JSON.
+Sextant is a structural Swift code search CLI tool (`sextant`) that parses Swift source files using swift-syntax, providing structured queries beyond what grep or LSP can offer. All output is JSON.
 
 ## Build & Test Commands
 
@@ -28,9 +28,9 @@ Two targets: an executable (`sextant`) and a library (`SextantLib`).
 
 ### SextantLib
 
-The library handles parsing and querying. **`FileParser` is the isolation boundary for SyntaxSparrow** — no SyntaxSparrow types escape that file. Everything downstream operates on owned value types:
+The library handles parsing and querying. **`FileParser` is the isolation boundary for swift-syntax** — no swift-syntax types escape that file. Everything downstream operates on owned value types:
 
-- **`FileParser`** — parses Swift source into `FileOverview` (tree of `Declaration` nodes). Source is parsed twice (once by SyntaxSparrow, once for `SourceLocationConverter`) — this is a known trade-off documented in code.
+- **`FileParser`** — parses Swift source into `FileOverview` (tree of `Declaration` nodes). Source is parsed once via `Parser.parse(source:)` and the resulting syntax tree is used for both declaration extraction and `SourceLocationConverter` creation.
 - **`FileScanner`** — walks directories collecting `.swift` files, excluding `.build/`, `checkouts/`, `.index-build/`.
 - **`SymbolTable`** — in-memory index built from `FileOverview`s. Keyed by name for exact-match lookup with optional kind filter.
 - **`StructuralQuery`** — regex-based enum case search against full serialized declarations, plus symbol-by-kind filtering.
@@ -53,8 +53,7 @@ Tests use `.swift` fixture files in `Tests/SextantTests/Fixtures/` loaded via `B
 
 ## Key Dependencies
 
-- **SyntaxSparrow** (6.1+) — high-level Swift syntax tree traversal
-- **swift-syntax** (601+) — `SwiftParser` for `SourceLocationConverter`
+- **swift-syntax** (601+) — Swift source parsing (`SwiftParser`), syntax tree traversal (`SwiftSyntax`), and source location resolution
 - **swift-argument-parser** (1.5+) — CLI framework
 - **swift-version-file-plugin** (0.2+) — generates `Version.swift` from package version
 

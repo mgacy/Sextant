@@ -9,7 +9,7 @@ SextantLib parses Swift source files into owned value types and provides structu
 The library has three main layers:
 
 1. **Scanning** — ``FileScanner`` walks a directory tree collecting `.swift` files.
-2. **Parsing** — ``FileParser`` parses files into ``FileOverview`` trees via SyntaxSparrow.
+2. **Parsing** — ``FileParser`` parses files into ``FileOverview`` trees via swift-syntax.
 3. **Querying** — ``SymbolTable`` and ``StructuralQuery`` search the parsed results.
 
 ### Typical Workflow

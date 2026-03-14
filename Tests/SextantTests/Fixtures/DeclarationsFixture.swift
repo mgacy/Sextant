@@ -93,6 +93,23 @@ actor NetworkManager: Sendable {
     }
 }
 
+// MARK: - Class
+
+class DataManager: NSObject, Sendable {
+    var cache: [String: Data] = [:]
+
+    func clear() {
+        cache = [:]
+    }
+}
+
+// MARK: - Protocol
+
+protocol Repository: Sendable {
+    func fetchAll() async throws -> [Item]
+    func save(_ item: Item) throws
+}
+
 // MARK: - Enum (verify existing behavior)
 
 enum Status {

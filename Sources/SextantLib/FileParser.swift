@@ -9,11 +9,10 @@
 import Foundation
 import SwiftParser
 import SwiftSyntax
-import SyntaxSparrow
 
-/// Parses Swift source files via SyntaxSparrow into owned model types.
+/// Parses Swift source files via swift-syntax into owned model types.
 ///
-/// This is the **isolation boundary** for SyntaxSparrow. No SyntaxSparrow types escape this file.
+/// This is the **isolation boundary** for swift-syntax. No swift-syntax types escape this file.
 /// All other code operates on `FileOverview`, `Declaration`, and `SymbolEntry`.
 public struct FileParser: Sendable {
 
@@ -104,20 +103,42 @@ public struct FileParser: Sendable {
 
     /// Parses a Swift source string into a `FileOverview`.
     ///
+    /// Source is parsed once via `Parser.parse(source:)`. The resulting `SourceFileSyntax` tree
+    /// is used both for declaration extraction and `SourceLocationConverter` creation.
+    ///
     /// - Parameters:
     ///   - source: The Swift source code string.
     ///   - file: The file path to associate with declarations (for display purposes).
     /// - Returns: A `FileOverview` with all extracted declarations.
     public func parseSource(_ source: String, file: String = "<memory>") -> FileOverview {
-        let tree = SyntaxTree(viewMode: .sourceAccurate, sourceBuffer: source)
-        tree.collectChildren()
+        let sourceFile = Parser.parse(source: source)
+        let converter = SourceLocationConverter(fileName: file, tree: sourceFile)
 
-        // NOTE: Source is parsed twice — once by SyntaxSparrow above and once here for
-        // SourceLocationConverter. SyntaxTree does not expose its internal SourceFileSyntax,
-        // so we cannot reuse it.
-        let converter = SourceLocationConverter(fileName: file, tree: Parser.parse(source: source))
-
-        let declarations = extractChildren(from: tree, file: file, source: source, converter: converter)
+        var declarations: [Declaration] = []
+        for statement in sourceFile.statements {
+            if let node = statement.item.as(StructDeclSyntax.self) {
+                declarations.append(convertStructure(node, file: file, converter: converter))
+            } else if let node = statement.item.as(EnumDeclSyntax.self) {
+                declarations.append(convertEnumeration(node, file: file, converter: converter))
+            } else if let node = statement.item.as(ClassDeclSyntax.self) {
+                declarations.append(convertClass(node, file: file, converter: converter))
+            } else if let node = statement.item.as(ProtocolDeclSyntax.self) {
+                declarations.append(convertProtocol(node, file: file, converter: converter))
+            } else if let node = statement.item.as(TypeAliasDeclSyntax.self) {
+                declarations.append(convertTypealias(node, converter: converter))
+            } else if let node = statement.item.as(FunctionDeclSyntax.self) {
+                declarations.append(convertFunction(node, converter: converter))
+            } else if let node = statement.item.as(VariableDeclSyntax.self) {
+                declarations.append(convertVariable(node, converter: converter))
+            } else if let node = statement.item.as(ExtensionDeclSyntax.self) {
+                declarations.append(convertExtension(node, file: file, converter: converter))
+            } else if let node = statement.item.as(ActorDeclSyntax.self) {
+                declarations.append(convertActor(node, file: file, converter: converter))
+            } else if let node = statement.item.as(InitializerDeclSyntax.self) {
+                declarations.append(convertInitializer(node, converter: converter))
+            }
+        }
+        declarations.sort { $0.line < $1.line }
         return FileOverview(file: file, declarations: declarations)
     }
 }
@@ -127,74 +148,79 @@ private extension FileParser {
     // MARK: - Structure Conversion
 
     func convertStructure(
-        _ structure: Structure,
+        _ node: StructDeclSyntax,
         file: String,
-        source: String,
         converter: SourceLocationConverter
     ) -> Declaration {
-        structure.collectChildren(viewMode: .sourceAccurate)
-        return Declaration(
-            name: structure.name,
+        Declaration(
+            name: node.name.text,
             kind: .struct,
-            line: lineNumber(for: structure.node, converter: converter),
-            attributes: structure.attributes.map { "@\($0.name)" },
-            conformances: structure.inheritance,
-            children: extractChildren(from: structure, file: file, source: source, converter: converter)
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
+            conformances: extractInheritance(from: node.inheritanceClause),
+            children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
     }
 
     // MARK: - Enumeration Conversion
 
     func convertEnumeration(
-        _ enumeration: Enumeration,
+        _ node: EnumDeclSyntax,
         file: String,
-        source: String,
         converter: SourceLocationConverter
     ) -> Declaration {
-        enumeration.collectChildren(viewMode: .sourceAccurate)
-
         var children: [Declaration] = []
 
-        // Enum cases
-        for enumCase in enumeration.cases {
-            let associatedValueStrings = enumCase.associatedValues.map { param -> String in
-                let label = param.name.flatMap { $0 == "_" ? nil : $0 }
-                let rawType = param.rawType ?? "Unknown"
-                if let label {
-                    return "\(label): \(rawType)"
+        // Enum cases — EnumCaseDeclSyntax contains an elements list
+        for member in node.memberBlock.members {
+            guard let caseDecl = member.decl.as(EnumCaseDeclSyntax.self) else { continue }
+
+            // Attributes live on EnumCaseDeclSyntax, propagate to each element
+            let caseAttributes = caseDecl.attributes.compactMap { element in
+                guard let attr = element.as(AttributeSyntax.self) else { return nil as String? }
+                return "@\(attr.attributeName.trimmedDescription)"
+            }
+
+            for element in caseDecl.elements {
+                let caseName = element.name.text
+
+                let associatedValueStrings: [String] = element.parameterClause?.parameters.map { param in
+                    let label: String? = if let text = param.firstName?.text, text != "_" { text } else { nil }
+                    let type = param.type.trimmedDescription
+                    if let label {
+                        return "\(label): \(type)"
+                    }
+                    return type
+                } ?? []
+
+                var fullDeclaration = caseName
+                if associatedValueStrings.isNotEmpty {
+                    fullDeclaration += "(\(associatedValueStrings.joined(separator: ", ")))"
                 }
-                return rawType
-            }
 
-            // Build the full serialized declaration for pattern matching
-            let caseName = enumCase.name
-            var fullDeclaration = caseName
-            if associatedValueStrings.isNotEmpty {
-                fullDeclaration += "(\(associatedValueStrings.joined(separator: ", ")))"
+                children.append(Declaration(
+                    name: caseName,
+                    kind: .case,
+                    line: lineNumber(for: element, converter: converter),
+                    attributes: caseAttributes,
+                    conformances: [],
+                    children: [],
+                    associatedValues: associatedValueStrings,
+                    fullDeclaration: fullDeclaration
+                ))
             }
-
-            children.append(Declaration(
-                name: caseName,
-                kind: .case,
-                line: lineNumber(for: enumCase.node, converter: converter),
-                attributes: enumCase.attributes.map { "@\($0.name)" },
-                conformances: [],
-                children: [],
-                associatedValues: associatedValueStrings,
-                fullDeclaration: fullDeclaration
-            ))
         }
 
-        // Nested types from the enum
-        children.append(contentsOf: extractChildren(from: enumeration, file: file, source: source, converter: converter))
+        // Nested types from the enum (non-case members)
+        children.append(contentsOf: extractChildren(from: node.memberBlock, file: file, converter: converter))
         children.sort { $0.line < $1.line }
 
         return Declaration(
-            name: enumeration.name,
+            name: node.name.text,
             kind: .enum,
-            line: lineNumber(for: enumeration.node, converter: converter),
-            attributes: enumeration.attributes.map { "@\($0.name)" },
-            conformances: enumeration.inheritance,
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
+            conformances: extractInheritance(from: node.inheritanceClause),
             children: children
         )
     }
@@ -202,52 +228,48 @@ private extension FileParser {
     // MARK: - Class Conversion
 
     func convertClass(
-        _ classDecl: Class,
+        _ node: ClassDeclSyntax,
         file: String,
-        source: String,
         converter: SourceLocationConverter
     ) -> Declaration {
-        classDecl.collectChildren(viewMode: .sourceAccurate)
-        return Declaration(
-            name: classDecl.name,
+        Declaration(
+            name: node.name.text,
             kind: .class,
-            line: lineNumber(for: classDecl.node, converter: converter),
-            attributes: classDecl.attributes.map { "@\($0.name)" },
-            conformances: classDecl.inheritance,
-            children: extractChildren(from: classDecl, file: file, source: source, converter: converter)
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
+            conformances: extractInheritance(from: node.inheritanceClause),
+            children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
     }
 
     // MARK: - Protocol Conversion
 
     func convertProtocol(
-        _ protocolDecl: ProtocolDecl,
+        _ node: ProtocolDeclSyntax,
         file: String,
-        source: String,
         converter: SourceLocationConverter
     ) -> Declaration {
-        protocolDecl.collectChildren(viewMode: .sourceAccurate)
-        return Declaration(
-            name: protocolDecl.name,
+        Declaration(
+            name: node.name.text,
             kind: .protocol,
-            line: lineNumber(for: protocolDecl.node, converter: converter),
-            attributes: protocolDecl.attributes.map { "@\($0.name)" },
-            conformances: protocolDecl.inheritance,
-            children: extractChildren(from: protocolDecl, file: file, source: source, converter: converter)
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
+            conformances: extractInheritance(from: node.inheritanceClause),
+            children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
     }
 
     // MARK: - Typealias Conversion
 
     func convertTypealias(
-        _ typealiasDecl: SyntaxSparrow.Typealias,
+        _ node: TypeAliasDeclSyntax,
         converter: SourceLocationConverter
     ) -> Declaration {
         Declaration(
-            name: typealiasDecl.name,
+            name: node.name.text,
             kind: .typealias,
-            line: lineNumber(for: typealiasDecl.node, converter: converter),
-            attributes: typealiasDecl.attributes.map { "@\($0.name)" },
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
             conformances: []
         )
     }
@@ -255,82 +277,82 @@ private extension FileParser {
     // MARK: - Extension Conversion
 
     func convertExtension(
-        _ ext: SyntaxSparrow.Extension,
+        _ node: ExtensionDeclSyntax,
         file: String,
-        source: String,
         converter: SourceLocationConverter
     ) -> Declaration {
-        ext.collectChildren(viewMode: .sourceAccurate)
-        return Declaration(
-            name: ext.extendedType,
+        Declaration(
+            name: node.extendedType.trimmedDescription,
             kind: .extension,
-            line: lineNumber(for: ext.node, converter: converter),
-            attributes: ext.attributes.map { "@\($0.name)" },
-            conformances: ext.inheritance,
-            children: extractChildren(from: ext, file: file, source: source, converter: converter)
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
+            conformances: extractInheritance(from: node.inheritanceClause),
+            children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
     }
 
     // MARK: - Actor Conversion
 
     func convertActor(
-        _ actorDecl: SyntaxSparrow.Actor,
+        _ node: ActorDeclSyntax,
         file: String,
-        source: String,
         converter: SourceLocationConverter
     ) -> Declaration {
-        actorDecl.collectChildren(viewMode: .sourceAccurate)
-        return Declaration(
-            name: actorDecl.name,
+        Declaration(
+            name: node.name.text,
             kind: .actor,
-            line: lineNumber(for: actorDecl.node, converter: converter),
-            attributes: actorDecl.attributes.map { "@\($0.name)" },
-            conformances: actorDecl.inheritance,
-            children: extractChildren(from: actorDecl, file: file, source: source, converter: converter)
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
+            conformances: extractInheritance(from: node.inheritanceClause),
+            children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
     }
 
     // MARK: - Function Conversion
 
     func convertFunction(
-        _ function: Function,
+        _ node: FunctionDeclSyntax,
         converter: SourceLocationConverter
     ) -> Declaration {
-        var parts = formatModifiers(function.modifiers)
+        var parts = formatModifiers(node.modifiers)
         parts.append("func")
-        parts.append(function.identifier)
+        parts.append(node.name.text)
 
         var decl = parts.joined(separator: " ")
 
-        // Parameters
-        let paramStrings = function.signature.input.map { $0.description }
+        // Parameters — trimmedDescription strips trivia; remove trailing comma if present
+        let paramStrings = node.signature.parameterClause.parameters.map { param in
+            var desc = param.trimmedDescription
+            if desc.hasSuffix(",") {
+                desc = String(desc.dropLast()).trimmingCharacters(in: .whitespaces)
+            }
+            return desc
+        }
         decl += "(\(paramStrings.joined(separator: ", ")))"
 
         // Effect specifiers
-        if let asyncSpec = function.signature.effectSpecifiers?.asyncSpecifier {
-            decl += " \(asyncSpec)"
+        if let asyncSpec = node.signature.effectSpecifiers?.asyncSpecifier {
+            decl += " \(asyncSpec.trimmedDescription)"
         }
-        if let throwsSpec = function.signature.effectSpecifiers?.throwsSpecifier {
-            if let throwsId = function.signature.effectSpecifiers?.throwsIdentifier {
-                decl += " \(throwsSpec)(\(throwsId))"
+        if let throwsClause = node.signature.effectSpecifiers?.throwsClause {
+            let throwsKeyword = throwsClause.throwsSpecifier.trimmedDescription
+            if let errorType = throwsClause.type {
+                decl += " \(throwsKeyword)(\(errorType.trimmedDescription))"
             } else {
-                decl += " \(throwsSpec)"
+                decl += " \(throwsKeyword)"
             }
         }
 
         // Return type
-        if let rawOutput = function.signature.rawOutputType {
-            let trimmed = rawOutput.trimmingCharacters(in: .whitespaces)
-            if trimmed.isNotEmpty {
-                decl += " -> \(trimmed)"
-            }
+        if let returnType = node.signature.returnClause?.type.trimmedDescription {
+            decl += " -> \(returnType)"
         }
 
         return Declaration(
-            name: function.identifier,
+            name: node.name.text,
             kind: .function,
-            line: lineNumber(for: function.node, converter: converter),
-            attributes: function.attributes.map { "@\($0.name)" },
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
             conformances: [],
             fullDeclaration: decl
         )
@@ -339,30 +361,28 @@ private extension FileParser {
     // MARK: - Variable Conversion
 
     func convertVariable(
-        _ variable: Variable,
+        _ node: VariableDeclSyntax,
         converter: SourceLocationConverter
     ) -> Declaration {
-        var parts = formatModifiers(variable.modifiers)
-        parts.append(variable.keyword)
-        parts.append(variable.name)
+        let binding = node.bindings.first!
+        let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text
+            ?? binding.pattern.trimmedDescription
+
+        var parts = formatModifiers(node.modifiers)
+        parts.append(node.bindingSpecifier.text)
+        parts.append(name)
 
         var decl = parts.joined(separator: " ")
 
-        // Type annotation
-        let typeDesc = variable.type.description
-        if typeDesc.isNotEmpty {
-            if let someOrAny = variable.someOrAnyKeyword {
-                decl += ": \(someOrAny) \(typeDesc)"
-            } else {
-                decl += ": \(typeDesc)"
-            }
+        if let typeAnnotation = binding.typeAnnotation {
+            decl += ": \(typeAnnotation.type.trimmedDescription)"
         }
 
         return Declaration(
-            name: variable.name,
+            name: name,
             kind: .variable,
-            line: lineNumber(for: variable.node, converter: converter),
-            attributes: variable.attributes.map { "@\($0.name)" },
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
             conformances: [],
             fullDeclaration: decl
         )
@@ -371,35 +391,42 @@ private extension FileParser {
     // MARK: - Initializer Conversion
 
     func convertInitializer(
-        _ initializer: Initializer,
+        _ node: InitializerDeclSyntax,
         converter: SourceLocationConverter
     ) -> Declaration {
-        var parts = formatModifiers(initializer.modifiers)
-        parts.append(initializer.isOptional ? "init?" : "init")
+        var parts = formatModifiers(node.modifiers)
+        parts.append(node.optionalMark != nil ? "init?" : "init")
 
         var decl = parts.joined(separator: " ")
 
         // Parameters
-        let paramStrings = initializer.parameters.map { $0.description }
+        let paramStrings = node.signature.parameterClause.parameters.map { param in
+            var desc = param.trimmedDescription
+            if desc.hasSuffix(",") {
+                desc = String(desc.dropLast()).trimmingCharacters(in: .whitespaces)
+            }
+            return desc
+        }
         decl += "(\(paramStrings.joined(separator: ", ")))"
 
         // Effect specifiers
-        if let asyncSpec = initializer.effectSpecifiers?.asyncSpecifier {
-            decl += " \(asyncSpec)"
+        if let asyncSpec = node.signature.effectSpecifiers?.asyncSpecifier {
+            decl += " \(asyncSpec.trimmedDescription)"
         }
-        if let throwsSpec = initializer.effectSpecifiers?.throwsSpecifier {
-            if let throwsId = initializer.effectSpecifiers?.throwsIdentifier {
-                decl += " \(throwsSpec)(\(throwsId))"
+        if let throwsClause = node.signature.effectSpecifiers?.throwsClause {
+            let throwsKeyword = throwsClause.throwsSpecifier.trimmedDescription
+            if let errorType = throwsClause.type {
+                decl += " \(throwsKeyword)(\(errorType.trimmedDescription))"
             } else {
-                decl += " \(throwsSpec)"
+                decl += " \(throwsKeyword)"
             }
         }
 
         return Declaration(
             name: "init",
             kind: .initializer,
-            line: lineNumber(for: initializer.node, converter: converter),
-            attributes: initializer.attributes.map { "@\($0.name)" },
+            line: lineNumber(for: node, converter: converter),
+            attributes: extractAttributes(from: node),
             conformances: [],
             fullDeclaration: decl
         )
@@ -408,65 +435,72 @@ private extension FileParser {
     // MARK: - Child Extraction
 
     func extractChildren(
-        from collecting: some SyntaxChildCollecting,
+        from memberBlock: MemberBlockSyntax,
         file: String,
-        source: String,
         converter: SourceLocationConverter
     ) -> [Declaration] {
         var children: [Declaration] = []
-
-        for structure in collecting.structures {
-            children.append(convertStructure(structure, file: file, source: source, converter: converter))
+        for member in memberBlock.members {
+            let decl = member.decl
+            if let node = decl.as(StructDeclSyntax.self) {
+                children.append(convertStructure(node, file: file, converter: converter))
+            } else if let node = decl.as(EnumDeclSyntax.self) {
+                children.append(convertEnumeration(node, file: file, converter: converter))
+            } else if let node = decl.as(ClassDeclSyntax.self) {
+                children.append(convertClass(node, file: file, converter: converter))
+            } else if let node = decl.as(ProtocolDeclSyntax.self) {
+                children.append(convertProtocol(node, file: file, converter: converter))
+            } else if let node = decl.as(TypeAliasDeclSyntax.self) {
+                children.append(convertTypealias(node, converter: converter))
+            } else if let node = decl.as(FunctionDeclSyntax.self) {
+                children.append(convertFunction(node, converter: converter))
+            } else if let node = decl.as(VariableDeclSyntax.self) {
+                children.append(convertVariable(node, converter: converter))
+            } else if let node = decl.as(ExtensionDeclSyntax.self) {
+                children.append(convertExtension(node, file: file, converter: converter))
+            } else if let node = decl.as(ActorDeclSyntax.self) {
+                children.append(convertActor(node, file: file, converter: converter))
+            } else if let node = decl.as(InitializerDeclSyntax.self) {
+                children.append(convertInitializer(node, converter: converter))
+            }
+            // EnumCaseDeclSyntax is handled inside convertEnumeration only
         }
-
-        for enumeration in collecting.enumerations {
-            children.append(convertEnumeration(enumeration, file: file, source: source, converter: converter))
-        }
-
-        for classDecl in collecting.classes {
-            children.append(convertClass(classDecl, file: file, source: source, converter: converter))
-        }
-
-        for protocolDecl in collecting.protocols {
-            children.append(convertProtocol(protocolDecl, file: file, source: source, converter: converter))
-        }
-
-        for typealiasDecl in collecting.typealiases {
-            children.append(convertTypealias(typealiasDecl, converter: converter))
-        }
-
-        for function in collecting.functions {
-            children.append(convertFunction(function, converter: converter))
-        }
-
-        for variable in collecting.variables {
-            children.append(convertVariable(variable, converter: converter))
-        }
-
-        for ext in collecting.extensions {
-            children.append(convertExtension(ext, file: file, source: source, converter: converter))
-        }
-
-        for actorDecl in collecting.actors {
-            children.append(convertActor(actorDecl, file: file, source: source, converter: converter))
-        }
-
-        for initializer in collecting.initializers {
-            children.append(convertInitializer(initializer, converter: converter))
-        }
-
         children.sort { $0.line < $1.line }
         return children
     }
 
-    // MARK: - Modifier Formatting
+    // MARK: - swift-syntax Helpers
 
-    func formatModifiers(_ modifiers: [SyntaxSparrow.Modifier]) -> [String] {
+    /// Extracts attribute names from a syntax node that conforms to `WithAttributesSyntax`.
+    ///
+    /// - Parameter node: A syntax node with attributes (e.g., `StructDeclSyntax`, `FunctionDeclSyntax`).
+    /// - Returns: An array of attribute strings prefixed with `@` (e.g., `["@Reducer", "@MainActor"]`).
+    func extractAttributes(from node: some WithAttributesSyntax) -> [String] {
+        node.attributes.compactMap { element in
+            guard let attr = element.as(AttributeSyntax.self) else { return nil }
+            return "@\(attr.attributeName.trimmedDescription)"
+        }
+    }
+
+    /// Extracts inherited type names from an inheritance clause.
+    ///
+    /// - Parameter clause: The optional inheritance clause (e.g., `: Codable, Sendable`).
+    /// - Returns: An array of type name strings (e.g., `["Codable", "Sendable"]`).
+    func extractInheritance(from clause: InheritanceClauseSyntax?) -> [String] {
+        guard let clause else { return [] }
+        return clause.inheritedTypes.map { $0.type.trimmedDescription }
+    }
+
+    /// Formats declaration modifiers into human-readable strings.
+    ///
+    /// - Parameter modifiers: The modifier list from a swift-syntax declaration node.
+    /// - Returns: An array of modifier strings (e.g., `["private(set)", "static"]`).
+    func formatModifiers(_ modifiers: DeclModifierListSyntax) -> [String] {
         modifiers.map { modifier in
             if let detail = modifier.detail {
-                "\(modifier.name)(\(detail))"
+                "\(modifier.name.text)(\(detail.detail.text))"
             } else {
-                modifier.name
+                modifier.name.text
             }
         }
     }
