@@ -364,7 +364,17 @@ private extension FileParser {
         _ node: VariableDeclSyntax,
         converter: SourceLocationConverter
     ) -> Declaration {
-        let binding = node.bindings.first!
+        // Only the first binding is extracted. Multi-binding declarations
+        // (e.g., `var x, y: Int`) are rare in Swift and not supported.
+        guard let binding = node.bindings.first else {
+            return Declaration(
+                name: "<unknown>",
+                kind: .variable,
+                line: lineNumber(for: node, converter: converter),
+                fullDeclaration: node.bindingSpecifier.text
+            )
+        }
+
         let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text
             ?? binding.pattern.trimmedDescription
 
