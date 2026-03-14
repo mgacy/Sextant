@@ -106,6 +106,11 @@ public struct FileParser: Sendable {
     /// Source is parsed once via `Parser.parse(source:)`. The resulting `SourceFileSyntax` tree
     /// is used both for declaration extraction and `SourceLocationConverter` creation.
     ///
+    /// Only explicit declaration syntax nodes are extracted. Freestanding macro expressions
+    /// (e.g., `#Preview { ... }`) are skipped — declarations inside their closures are local
+    /// to the macro and not surfaced. Attached macros (e.g., `@Reducer`, `@Observable`) are
+    /// preserved as attributes on the declarations they annotate.
+    ///
     /// - Parameters:
     ///   - source: The Swift source code string.
     ///   - file: The file path to associate with declarations (for display purposes).
