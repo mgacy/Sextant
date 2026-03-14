@@ -14,7 +14,7 @@ import SextantLib
 /// Accepts a path (file or directory) and an optional `--pattern` regex. Parses all Swift files
 /// found at the path and uses `StructuralQuery` to find matching enum cases. Outputs JSON with
 /// enum name, case name, associated values, file, and line.
-struct EnumCasesCommand: ParsableCommand {
+struct EnumCasesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "enum-cases",
         abstract: "Search for enum cases with optional pattern filtering"
@@ -31,9 +31,9 @@ struct EnumCasesCommand: ParsableCommand {
 
     @OptionGroup var output: OutputOptions
 
-    func run() throws {
+    func run() async throws {
         let query = StructuralQuery()
-        let overviews = try scanAndParse(at: path, relativeTo: output.absolute ? nil : path)
+        let overviews = try await scanAndParse(at: path, relativeTo: output.absolute ? nil : path)
 
         var results: [EnumCaseMatch]
         if let pattern {

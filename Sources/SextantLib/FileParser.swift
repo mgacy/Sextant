@@ -22,15 +22,70 @@ public struct FileParser: Sendable {
 
         public var errorDescription: String? {
             switch self {
-            case let .fileUnreadable(path, underlying):
-                "Cannot read file: \(path) (\(underlying.localizedDescription))"
+            case let .fileUnreadable(path, underlying): "Cannot read file: \(path) (\(underlying.localizedDescription))"
             }
         }
     }
 
     public init() {}
 
-    // MARK: - Public API
+    /// Parses multiple Swift files concurrently.
+    ///
+    /// Files are parsed in parallel using a `TaskGroup`. Results are sorted by file path
+    /// for deterministic output. Parse failures for individual files are collected in the
+    /// result rather than thrown.
+    ///
+    /// - Parameter paths: An array of absolute paths to `.swift` files.
+    /// - Returns: A ``ParseResult`` containing successes and failures, both sorted by file path.
+    public func parseFiles(atPaths paths: [String]) async -> ParseResult {
+        let results = await withTaskGroup(
+            of: (String, Swift.Result<FileOverview, Error>).self
+        ) { group in
+            for file in paths {
+                group.addTask {
+                    (file, self.parseFileResult(at: file))
+                }
+            }
+
+            var collected: [(String, Swift.Result<FileOverview, Error>)] = []
+            collected.reserveCapacity(paths.count)
+            for await result in group {
+                collected.append(result)
+            }
+            return collected
+        }
+
+        let sorted = results.sorted { $0.0 < $1.0 }
+
+        var overviews: [FileOverview] = []
+        overviews.reserveCapacity(paths.count)
+        var failures: [ParseFailure] = []
+
+        for (file, result) in sorted {
+            switch result {
+            case .success(let overview):
+                overviews.append(overview)
+            case .failure(let error):
+                failures.append(ParseFailure(file: file, error: error))
+            }
+        }
+
+        return ParseResult(overviews: overviews, failures: failures)
+    }
+
+    /// Scans a path for Swift files and parses them concurrently.
+    ///
+    /// If `path` points to a single file, parses just that file. If `path` points to a directory,
+    /// recursively scans for `.swift` files (excluding build artifacts) and parses all of them.
+    ///
+    /// - Parameter path: A file or directory path to scan.
+    /// - Returns: A ``ParseResult`` containing successes and failures.
+    /// - Throws: `FileScanner.Error` if the path does not exist or the directory cannot be enumerated.
+    public func parseFiles(in path: String) async throws(FileScanner.Error) -> ParseResult {
+        let scanner = FileScanner()
+        let files = try scanner.collectSwiftFiles(at: path)
+        return await parseFiles(atPaths: files)
+    }
 
     /// Parses a Swift file at the given path into a `FileOverview`.
     ///
@@ -78,16 +133,13 @@ private extension FileParser {
         converter: SourceLocationConverter
     ) -> Declaration {
         structure.collectChildren(viewMode: .sourceAccurate)
-
-        let children = extractChildren(from: structure, file: file, source: source, converter: converter)
-
         return Declaration(
             name: structure.name,
             kind: .struct,
             line: lineNumber(for: structure.node, converter: converter),
             attributes: structure.attributes.map { "@\($0.name)" },
             conformances: structure.inheritance,
-            children: children
+            children: extractChildren(from: structure, file: file, source: source, converter: converter)
         )
     }
 
@@ -135,7 +187,6 @@ private extension FileParser {
 
         // Nested types from the enum
         children.append(contentsOf: extractChildren(from: enumeration, file: file, source: source, converter: converter))
-
         children.sort { $0.line < $1.line }
 
         return Declaration(
@@ -157,16 +208,13 @@ private extension FileParser {
         converter: SourceLocationConverter
     ) -> Declaration {
         classDecl.collectChildren(viewMode: .sourceAccurate)
-
-        let children = extractChildren(from: classDecl, file: file, source: source, converter: converter)
-
         return Declaration(
             name: classDecl.name,
             kind: .class,
             line: lineNumber(for: classDecl.node, converter: converter),
             attributes: classDecl.attributes.map { "@\($0.name)" },
             conformances: classDecl.inheritance,
-            children: children
+            children: extractChildren(from: classDecl, file: file, source: source, converter: converter)
         )
     }
 
@@ -179,16 +227,13 @@ private extension FileParser {
         converter: SourceLocationConverter
     ) -> Declaration {
         protocolDecl.collectChildren(viewMode: .sourceAccurate)
-
-        let children = extractChildren(from: protocolDecl, file: file, source: source, converter: converter)
-
         return Declaration(
             name: protocolDecl.name,
             kind: .protocol,
             line: lineNumber(for: protocolDecl.node, converter: converter),
             attributes: protocolDecl.attributes.map { "@\($0.name)" },
             conformances: protocolDecl.inheritance,
-            children: children
+            children: extractChildren(from: protocolDecl, file: file, source: source, converter: converter)
         )
     }
 
@@ -216,16 +261,13 @@ private extension FileParser {
         converter: SourceLocationConverter
     ) -> Declaration {
         ext.collectChildren(viewMode: .sourceAccurate)
-
-        let children = extractChildren(from: ext, file: file, source: source, converter: converter)
-
         return Declaration(
             name: ext.extendedType,
             kind: .extension,
             line: lineNumber(for: ext.node, converter: converter),
             attributes: ext.attributes.map { "@\($0.name)" },
             conformances: ext.inheritance,
-            children: children
+            children: extractChildren(from: ext, file: file, source: source, converter: converter)
         )
     }
 
@@ -238,16 +280,13 @@ private extension FileParser {
         converter: SourceLocationConverter
     ) -> Declaration {
         actorDecl.collectChildren(viewMode: .sourceAccurate)
-
-        let children = extractChildren(from: actorDecl, file: file, source: source, converter: converter)
-
         return Declaration(
             name: actorDecl.name,
             kind: .actor,
             line: lineNumber(for: actorDecl.node, converter: converter),
             attributes: actorDecl.attributes.map { "@\($0.name)" },
             conformances: actorDecl.inheritance,
-            children: children
+            children: extractChildren(from: actorDecl, file: file, source: source, converter: converter)
         )
     }
 
@@ -432,10 +471,19 @@ private extension FileParser {
         }
     }
 
+    // MARK: - Bulk Parsing
+
+    func parseFileResult(at path: String) -> Swift.Result<FileOverview, Error> {
+        do {
+            return .success(try parseFile(at: path))
+        } catch {
+            return .failure(error)
+        }
+    }
+
     // MARK: - Line Number Resolution
 
     func lineNumber(for node: some SyntaxProtocol, converter: SourceLocationConverter) -> Int {
-        let location = node.startLocation(converter: converter)
-        return location.line
+        node.startLocation(converter: converter).line
     }
 }

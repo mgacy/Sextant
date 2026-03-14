@@ -13,7 +13,7 @@ import ArgumentParser
 /// Parses Swift source files using SyntaxSparrow and provides structured queries that go beyond
 /// what grep or LSP can offer.
 @main
-struct Sextant: ParsableCommand {
+struct Sextant: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sextant",
         abstract: "Structural Swift code search",
