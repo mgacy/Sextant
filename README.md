@@ -1,6 +1,6 @@
 # Sextant
 
-A structural Swift code search tool that gives coding agents (Claude Code, Cursor, Copilot, etc.) what grep and LSP can't: a machine-readable map of Swift code structure. It parses source files with [SyntaxSparrow](https://github.com/CheekyGhost-Labs/SyntaxSparrow) and [swift-syntax](https://github.com/swiftlang/swift-syntax) and outputs everything as JSON.
+A structural Swift code search tool that gives coding agents (Claude Code, Cursor, Copilot, etc.) what grep and LSP can't: a machine-readable map of Swift code structure. It parses source files with [swift-syntax](https://github.com/swiftlang/swift-syntax) and outputs everything as JSON.
 
 ## Why
 
@@ -145,7 +145,7 @@ let cases = try query.findEnumCases(matching: "Result<", in: overviews)
 
 | Type | Role |
 |---|---|
-| `FileParser` | Parses Swift source into `FileOverview`. Isolation boundary for SyntaxSparrow. |
+| `FileParser` | Parses Swift source into `FileOverview`. Isolation boundary for swift-syntax. |
 | `FileScanner` | Walks directories collecting `.swift` files (excludes `.build/`, `checkouts/`, etc.). |
 | `SymbolTable` | In-memory index for fast name-based lookup with optional kind filter. |
 | `StructuralQuery` | Regex-based enum case search and symbol-by-kind filtering. |
@@ -164,6 +164,5 @@ mise run lint            # Lint with SwiftLint
 
 ## Dependencies
 
-- [SyntaxSparrow](https://github.com/CheekyGhost-Labs/SyntaxSparrow) — High-level Swift syntax tree traversal
-- [swift-syntax](https://github.com/swiftlang/swift-syntax) — Source location resolution
+- [swift-syntax](https://github.com/swiftlang/swift-syntax) — Swift source parsing, syntax tree traversal, and source location resolution
 - [swift-argument-parser](https://github.com/apple/swift-argument-parser) — CLI framework

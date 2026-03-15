@@ -200,6 +200,35 @@ struct FileParserTests {
         #expect(typealiases.contains { $0.name == "CompletionHandler" })
     }
 
+    // MARK: - Class Tests
+
+    @Test("Extracts class declarations with inheritance and children")
+    func extractsClass() throws {
+        let source = fixtureSource("DeclarationsFixture")
+        let overview = parser.parseSource(source, file: "DeclarationsFixture.swift")
+
+        let classDecl = try #require(overview.declarations.first { $0.kind == .class })
+        #expect(classDecl.name == "DataManager")
+        #expect(classDecl.conformances.contains("NSObject"))
+        #expect(classDecl.conformances.contains("Sendable"))
+        #expect(classDecl.children.contains { $0.kind == .variable && $0.name == "cache" })
+        #expect(classDecl.children.contains { $0.kind == .function && $0.name == "clear" })
+    }
+
+    // MARK: - Protocol Tests
+
+    @Test("Extracts protocol declarations with inheritance and member requirements")
+    func extractsProtocol() throws {
+        let source = fixtureSource("DeclarationsFixture")
+        let overview = parser.parseSource(source, file: "DeclarationsFixture.swift")
+
+        let protocolDecl = try #require(overview.declarations.first { $0.kind == .protocol })
+        #expect(protocolDecl.name == "Repository")
+        #expect(protocolDecl.conformances.contains("Sendable"))
+        #expect(protocolDecl.children.contains { $0.kind == .function && $0.name == "fetchAll" })
+        #expect(protocolDecl.children.contains { $0.kind == .function && $0.name == "save" })
+    }
+
     // MARK: - Line Number Tests
 
     @Test("Line numbers are 1-based and monotonically increasing for top-level declarations")

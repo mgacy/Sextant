@@ -26,7 +26,7 @@ public enum SymbolKind: String, Codable, Equatable, Sendable {
 
 /// A single declaration extracted from a Swift source file.
 ///
-/// This is an owned value type with no dependencies on SyntaxSparrow.
+/// This is an owned value type with no dependencies on swift-syntax.
 /// All information is captured at parse time.
 /// Uses compact JSON encoding — empty arrays are omitted via `@OmitEmpty`.
 public struct SymbolEntry: Codable, Equatable, Sendable {

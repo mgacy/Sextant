@@ -10,7 +10,7 @@ import Foundation
 
 /// A declaration within a file, potentially containing nested children.
 ///
-/// This is an owned value type with no dependencies on SyntaxSparrow.
+/// This is an owned value type with no dependencies on swift-syntax.
 /// Uses compact JSON encoding — empty arrays and empty strings are omitted via `@OmitEmpty`.
 public struct Declaration: Codable, Equatable, Sendable {
 
@@ -74,7 +74,7 @@ public struct Declaration: Codable, Equatable, Sendable {
 
 /// An overview of all top-level declarations in a Swift source file.
 ///
-/// This is an owned value type with no dependencies on SyntaxSparrow.
+/// This is an owned value type with no dependencies on swift-syntax.
 public struct FileOverview: Codable, Equatable, Sendable {
 
     /// The path to the source file.

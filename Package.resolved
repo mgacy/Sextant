@@ -1,5 +1,5 @@
 {
-  "originHash" : "ab16beca288f633537d06ee0a4d487b6d2c077aafc8bd71678cc52c0bbeed2da",
+  "originHash" : "8c0b64ddc4dd8fb648ed8d730ebaba1c18f2f275689571fa9419e1a394c7ab61",
   "pins" : [
     {
       "identity" : "swift-argument-parser",
@@ -44,15 +44,6 @@
       "state" : {
         "revision" : "23349c4f7c66eed19dee3cccd186e131eebc503f",
         "version" : "0.2.1"
-      }
-    },
-    {
-      "identity" : "syntaxsparrow",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/CheekyGhost-Labs/SyntaxSparrow",
-      "state" : {
-        "revision" : "dd2290ec4f0beb451921c4a5dbeadf924dc6a5a3",
-        "version" : "6.1.0"
       }
     }
   ],

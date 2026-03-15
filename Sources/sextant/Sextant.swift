@@ -10,7 +10,7 @@ import ArgumentParser
 
 /// Structural Swift code search tool.
 ///
-/// Parses Swift source files using SyntaxSparrow and provides structured queries that go beyond
+/// Parses Swift source files using swift-syntax and provides structured queries that go beyond
 /// what grep or LSP can offer.
 @main
 struct Sextant: AsyncParsableCommand {
