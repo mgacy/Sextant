@@ -6,6 +6,7 @@
 //  Copyright © 2026 Mathew Gacy. All rights reserved.
 //
 
+// swiftlint:disable file_length
 import Foundation
 import SwiftParser
 import SwiftSyntax
@@ -116,6 +117,7 @@ public struct FileParser: Sendable {
     ///   - file: The file path to associate with declarations (for display purposes).
     /// - Returns: A `FileOverview` with all extracted declarations.
     public func parseSource(_ source: String, file: String = "<memory>") -> FileOverview {
+        // swiftlint:disable:previous cyclomatic_complexity
         let sourceFile = Parser.parse(source: source)
         let converter = SourceLocationConverter(fileName: file, tree: sourceFile)
 
@@ -426,12 +428,12 @@ private extension FileParser {
             fullDeclaration: decl
         )
     }
-
 }
 
 // MARK: - Extraction
 
 private extension FileParser {
+    // swiftlint:disable:next cyclomatic_complexity
     func extractChildren(
         from memberBlock: MemberBlockSyntax,
         file: String,
