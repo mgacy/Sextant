@@ -90,16 +90,7 @@ func scanAndFindReferences(
             let relativePath = match.file.hasPrefix(prefix)
                 ? String(match.file.dropFirst(prefix.count))
                 : match.file
-            return ReferenceMatch(
-                name: match.name,
-                position: match.position,
-                declarationName: match.declarationName,
-                declarationKind: match.declarationKind,
-                parentName: match.parentName,
-                fullDeclaration: match.fullDeclaration,
-                file: relativePath,
-                line: match.line
-            )
+            return match.with(file: relativePath)
         }
     }
 

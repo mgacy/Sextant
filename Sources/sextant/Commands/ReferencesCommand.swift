@@ -12,7 +12,7 @@ import SextantLib
 ///
 /// Finds where a type name appears in inheritance clauses, parameter types, return types,
 /// type annotations, typealias targets, and generic constraints. Does not match inside
-/// function bodies, variable initializers, or computed property bodies.
+/// function bodies, variable initializers, computed property bodies, or import statements.
 struct ReferencesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "references",

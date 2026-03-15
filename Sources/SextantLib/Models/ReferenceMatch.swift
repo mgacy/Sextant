@@ -34,7 +34,8 @@ public struct ReferenceMatch: Codable, Equatable, Sendable {
     /// Parent chain for nested declarations (e.g., "ListReducer.State"). Empty for top-level.
     @OmitEmpty public var parentName: String
 
-    /// The full serialized declaration containing the reference (e.g., "case item(ItemReducer)").
+    /// The declaration signature containing the reference (e.g., "case item(ItemReducer)").
+    /// For declarations with bodies, the text before the opening brace is used.
     @OmitEmpty public var fullDeclaration: String
 
     /// The file where this reference appears.
@@ -51,7 +52,7 @@ public struct ReferenceMatch: Codable, Equatable, Sendable {
     ///   - declarationName: Name of the containing declaration.
     ///   - declarationKind: Kind of the containing declaration.
     ///   - parentName: Parent chain for nested declarations.
-    ///   - fullDeclaration: The full serialized containing declaration.
+    ///   - fullDeclaration: The declaration signature containing the reference.
     ///   - file: The file where this reference appears.
     ///   - line: The 1-based line number of the containing declaration.
     public init(
@@ -72,6 +73,23 @@ public struct ReferenceMatch: Codable, Equatable, Sendable {
         self.fullDeclaration = fullDeclaration
         self.file = file
         self.line = line
+    }
+
+    /// Returns a copy with the file path replaced.
+    ///
+    /// - Parameter file: The new file path.
+    /// - Returns: A copy of this match with the given file path.
+    public func with(file: String) -> ReferenceMatch {
+        ReferenceMatch(
+            name: name,
+            position: position,
+            declarationName: declarationName,
+            declarationKind: declarationKind,
+            parentName: parentName,
+            fullDeclaration: fullDeclaration,
+            file: file,
+            line: line
+        )
     }
 }
 

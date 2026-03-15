@@ -28,14 +28,14 @@ Two targets: an executable (`sextant`) and a library (`SextantLib`).
 
 ### SextantLib
 
-The library handles parsing and querying. **`FileParser` is the isolation boundary for swift-syntax** — no swift-syntax types escape that file. Everything downstream operates on owned value types:
+The library handles parsing and querying. **`FileParser` is the isolation boundary for swift-syntax** — no swift-syntax types escape the public API. Everything downstream operates on owned value types:
 
 - **`FileParser`** — parses Swift source into `FileOverview` (tree of `Declaration` nodes). Source is parsed once via `Parser.parse(source:)` and the resulting syntax tree is used for both declaration extraction and `SourceLocationConverter` creation.
 - **`FileScanner`** — walks directories collecting `.swift` files, excluding `.build/`, `checkouts/`, `.index-build/`.
 - **`SymbolTable`** — in-memory index built from `FileOverview`s. Keyed by name for exact-match lookup with optional kind filter.
 - **`StructuralQuery`** — regex-based enum case search against full serialized declarations, plus symbol-by-kind filtering.
-- **`TypeReferenceFinder`** — internal `SyntaxVisitor` subclass that finds type-position references (inheritance, parameters, return types, type annotations, typealias targets, generic constraints) while skipping function bodies, initializers, and computed property bodies. Used by `FileParser+References`.
-- **Models** (`FileOverview.swift`, `SymbolEntry.swift`, `ReferenceMatch.swift`) — `Declaration`, `FileOverview`, `SymbolEntry`, `SymbolKind`, `ReferenceMatch`, `ReferencePosition`, `ReferenceResult`. All `Codable`, `Equatable`, `Sendable`.
+- **`TypeReferenceFinder`** — internal `SyntaxVisitor` subclass that finds type-position references (inheritance, parameters, return types, type annotations, typealias targets, generic constraints) while skipping function bodies, variable initializers, computed property bodies, and import statements. Used by `FileParser+References`.
+- **Models** (`FileOverview.swift`, `SymbolEntry.swift`, `ReferenceMatch.swift`) — `Declaration`, `FileOverview`, `SymbolEntry`, `SymbolKind`, `ReferenceMatch`, `ReferencePosition`. All `Codable`, `Equatable`, `Sendable`. Result containers (`ParseResult`, `ReferenceResult`) are `Sendable`.
 - **`@OmitEmpty`** (`OmitEmpty.swift`) — custom property wrapper used on `Declaration` fields to omit empty arrays/strings from JSON output. Uses `EmptyInitializable` protocol + `KeyedEncodingContainer`/`KeyedDecodingContainer` overloads.
 
 ### sextant (CLI)
