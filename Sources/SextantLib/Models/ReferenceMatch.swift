@@ -89,6 +89,9 @@ public struct ReferenceResult: Sendable {
     /// The number of files that were successfully scanned.
     public let scannedFileCount: Int
 
+    /// The total number of files that were attempted.
+    public var totalCount: Int { scannedFileCount + failures.count }
+
     /// Whether all attempted files failed to parse.
     public var allFailed: Bool { scannedFileCount == 0 && !failures.isEmpty }
 

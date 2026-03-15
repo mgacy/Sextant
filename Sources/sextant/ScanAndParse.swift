@@ -75,14 +75,12 @@ func scanAndFindReferences(
     }
 
     if !result.failures.isEmpty {
-        let totalCount = result.scannedFileCount + result.failures.count
-        fputs("warning: \(result.failures.count) of \(totalCount) files could not be parsed\n", stderr)
+        fputs("warning: \(result.failures.count) of \(result.totalCount) files could not be parsed\n", stderr)
     }
 
     if result.allFailed {
-        let totalCount = result.scannedFileCount + result.failures.count
         throw ValidationError(
-            "All \(totalCount) files failed to parse. Check file permissions and encoding."
+            "All \(result.totalCount) files failed to parse. Check file permissions and encoding."
         )
     }
 

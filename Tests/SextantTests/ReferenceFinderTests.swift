@@ -28,56 +28,64 @@ struct ReferenceFinderTests {
     func findsInheritanceReference() {
         let matches = findTargetTypeReferences()
         let inheritance = matches.filter { $0.position == .inheritance && $0.declarationName == "ConformingStruct" }
-        #expect(!inheritance.isEmpty)
+        #expect(inheritance.count == 1)
+        #expect(inheritance.first?.name == "TargetType")
     }
 
     @Test("Finds reference in enum associated value")
     func findsAssociatedValueReference() {
         let matches = findTargetTypeReferences()
         let assocValue = matches.filter { $0.position == .associatedValue && $0.declarationName == "fetched" }
-        #expect(!assocValue.isEmpty)
+        #expect(assocValue.count == 1)
+        #expect(assocValue.first?.name == "TargetType")
     }
 
     @Test("Finds reference in function parameter type")
     func findsParameterTypeReference() {
         let matches = findTargetTypeReferences()
         let paramType = matches.filter { $0.position == .parameterType && $0.declarationName == "process" }
-        #expect(!paramType.isEmpty)
+        #expect(paramType.count == 1)
+        #expect(paramType.first?.name == "TargetType")
     }
 
     @Test("Finds reference in return type")
     func findsReturnTypeReference() {
         let matches = findTargetTypeReferences()
         let returnType = matches.filter { $0.position == .returnType && $0.declarationName == "process" }
-        #expect(!returnType.isEmpty)
+        #expect(returnType.count == 1)
+        #expect(returnType.first?.name == "TargetType")
     }
 
     @Test("Finds reference in variable type annotation")
     func findsTypeAnnotationReference() {
         let matches = findTargetTypeReferences()
         let typeAnnotation = matches.filter { $0.position == .typeAnnotation && $0.declarationName == "globalTarget" }
-        #expect(!typeAnnotation.isEmpty)
+        #expect(typeAnnotation.count == 1)
+        #expect(typeAnnotation.first?.name == "TargetType")
     }
 
     @Test("Finds reference in typealias target")
     func findsTypealiasTargetReference() {
         let matches = findTargetTypeReferences()
         let typealiasTarget = matches.filter { $0.position == .typealiasTarget && $0.declarationName == "Alias" }
-        #expect(!typealiasTarget.isEmpty)
+        #expect(typealiasTarget.count == 1)
+        #expect(typealiasTarget.first?.name == "TargetType")
     }
 
     @Test("Finds reference in generic where clause")
     func findsGenericConstraintReference() {
         let matches = findTargetTypeReferences()
         let generic = matches.filter { $0.position == .genericConstraint && $0.declarationName == "constrained" }
-        #expect(!generic.isEmpty)
+        #expect(generic.count == 1)
+        #expect(generic.first?.name == "TargetType")
     }
 
     @Test("Finds reference in extension inheritance clause")
     func findsExtensionInheritanceReference() {
         let matches = findTargetTypeReferences()
         let extInheritance = matches.filter { $0.position == .inheritance && $0.declarationKind == .extension }
-        #expect(!extInheritance.isEmpty)
+        #expect(extInheritance.count == 1)
+        #expect(extInheritance.first?.name == "TargetType")
     }
 
     @Test("Does NOT match inside function body")
@@ -98,7 +106,6 @@ struct ReferenceFinderTests {
         var x: String = TargetType.description
         """
         let matches = parser.findReferences(to: "TargetType", in: source, file: "test.swift")
-        // Should only find the String reference if searching for "String", not TargetType in initializer
         #expect(matches.isEmpty)
     }
 
@@ -116,10 +123,22 @@ struct ReferenceFinderTests {
         #expect(matches.isEmpty)
     }
 
+    @Test("Does NOT match inside import statement")
+    func excludesImportStatement() {
+        let source = """
+        import struct Foundation.TargetType
+        struct S: TargetType {}
+        """
+        let matches = parser.findReferences(to: "TargetType", in: source, file: "test.swift")
+        #expect(matches.count == 1)
+        #expect(matches.first?.position == .inheritance)
+    }
+
     @Test("Tracks parent chain for nested declarations")
     func tracksParentChain() {
         let matches = findTargetTypeReferences()
         let nested = matches.filter { $0.declarationName == "nested" }
+        #expect(nested.count == 1)
         #expect(nested.first?.parentName.contains("Outer") == true)
         #expect(nested.first?.parentName.contains("Inner") == true)
     }
@@ -129,23 +148,32 @@ struct ReferenceFinderTests {
         let source = fixtureSource("TypeReferences")
         let matches = parser.findReferences(to: "Foo", in: source, file: "TypeReferences.swift")
         let memberMatch = matches.filter { $0.name == "Foo.Bar" }
-        #expect(!memberMatch.isEmpty)
+        #expect(memberMatch.count == 1)
+    }
+
+    @Test("MemberTypeSyntax: searching member name matches full member type")
+    func matchesMemberTypeByMemberName() {
+        let source = fixtureSource("TypeReferences")
+        let matches = parser.findReferences(to: "Bar", in: source, file: "TypeReferences.swift")
+        let memberMatch = matches.filter { $0.name == "Foo.Bar" }
+        #expect(memberMatch.count == 1)
+        #expect(memberMatch.first?.position == .typeAnnotation)
     }
 
     @Test("Closure type in annotation classified as typeAnnotation")
     func classifiesClosureTypeAsAnnotation() {
         let matches = findTargetTypeReferences()
         let closureRef = matches.filter { $0.declarationName == "handler" && $0.position == .typeAnnotation }
-        #expect(!closureRef.isEmpty)
+        #expect(closureRef.count == 1)
+        #expect(closureRef.first?.name == "TargetType")
     }
 
     @Test("Protocol associatedtype constraint classified as inheritance")
     func classifiesAssociatedTypeConstraint() {
         let matches = findTargetTypeReferences()
-        // No AssociatedTypeDeclSyntax context push -- declarationName is the enclosing protocol
-        let assocType = matches.filter { $0.declarationName == "Element" || $0.declarationName == "Container" }
-        let inheritance = assocType.filter { $0.position == .inheritance }
-        #expect(!inheritance.isEmpty)
+        let assocType = matches.filter { $0.declarationName == "Container" && $0.position == .inheritance }
+        #expect(assocType.count == 1)
+        #expect(assocType.first?.name == "TargetType")
     }
 
     @Test("Returns empty array when no matches exist")
