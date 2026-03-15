@@ -21,7 +21,8 @@ struct Sextant: AsyncParsableCommand {
         subcommands: [
             OverviewCommand.self,
             EnumCasesCommand.self,
-            LookupCommand.self
+            LookupCommand.self,
+            ReferencesCommand.self
         ]
     )
 }
