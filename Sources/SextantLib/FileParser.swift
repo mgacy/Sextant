@@ -107,10 +107,11 @@ public struct FileParser: Sendable {
     /// Source is parsed once via `Parser.parse(source:)`. The resulting `SourceFileSyntax` tree
     /// is used both for declaration extraction and `SourceLocationConverter` creation.
     ///
-    /// Only explicit declaration syntax nodes are extracted. Freestanding macro expressions
-    /// (e.g., `#Preview { ... }`) are skipped — declarations inside their closures are local
-    /// to the macro and not surfaced. Attached macros (e.g., `@Reducer`, `@Observable`) are
-    /// preserved as attributes on the declarations they annotate.
+    /// Only explicit declaration syntax nodes are extracted. Conditional compilation blocks
+    /// (`#if`/`#elseif`/`#else`) and freestanding macro expressions (e.g., `#Preview { ... }`)
+    /// are skipped — declarations inside them are not surfaced. Attached macros
+    /// (e.g., `@Reducer`, `@Observable`) are preserved as attributes on the declarations
+    /// they annotate.
     ///
     /// - Parameters:
     ///   - source: The Swift source code string.
@@ -464,6 +465,7 @@ private extension FileParser {
                 children.append(convertInitializer(node, converter: converter))
             }
             // EnumCaseDeclSyntax is handled inside convertEnumeration only
+            // IfConfigDeclSyntax (#if/#elseif/#else) is intentionally skipped
         }
         children.sort { $0.line < $1.line }
         return children
