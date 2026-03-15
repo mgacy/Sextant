@@ -148,10 +148,9 @@ public struct FileParser: Sendable {
     }
 }
 
+// MARK: - Conversion
+
 private extension FileParser {
-
-    // MARK: - Structure Conversion
-
     func convertStructure(
         _ node: StructDeclSyntax,
         file: String,
@@ -166,8 +165,6 @@ private extension FileParser {
             children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
     }
-
-    // MARK: - Enumeration Conversion
 
     func convertEnumeration(
         _ node: EnumDeclSyntax,
@@ -216,7 +213,7 @@ private extension FileParser {
             }
         }
 
-        // Nested types from the enum (non-case members)
+        // Non-case members from the enum (methods, properties, nested types, etc.)
         children.append(contentsOf: extractChildren(from: node.memberBlock, file: file, converter: converter))
         children.sort { $0.line < $1.line }
 
@@ -229,8 +226,6 @@ private extension FileParser {
             children: children
         )
     }
-
-    // MARK: - Class Conversion
 
     func convertClass(
         _ node: ClassDeclSyntax,
@@ -247,8 +242,6 @@ private extension FileParser {
         )
     }
 
-    // MARK: - Protocol Conversion
-
     func convertProtocol(
         _ node: ProtocolDeclSyntax,
         file: String,
@@ -264,8 +257,6 @@ private extension FileParser {
         )
     }
 
-    // MARK: - Typealias Conversion
-
     func convertTypealias(
         _ node: TypeAliasDeclSyntax,
         converter: SourceLocationConverter
@@ -278,8 +269,6 @@ private extension FileParser {
             conformances: []
         )
     }
-
-    // MARK: - Extension Conversion
 
     func convertExtension(
         _ node: ExtensionDeclSyntax,
@@ -296,8 +285,6 @@ private extension FileParser {
         )
     }
 
-    // MARK: - Actor Conversion
-
     func convertActor(
         _ node: ActorDeclSyntax,
         file: String,
@@ -312,8 +299,6 @@ private extension FileParser {
             children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
     }
-
-    // MARK: - Function Conversion
 
     func convertFunction(
         _ node: FunctionDeclSyntax,
@@ -363,8 +348,6 @@ private extension FileParser {
         )
     }
 
-    // MARK: - Variable Conversion
-
     func convertVariable(
         _ node: VariableDeclSyntax,
         converter: SourceLocationConverter
@@ -380,8 +363,7 @@ private extension FileParser {
             )
         }
 
-        let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text
-            ?? binding.pattern.trimmedDescription
+        let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text ?? binding.pattern.trimmedDescription
 
         var parts = formatModifiers(node.modifiers)
         parts.append(node.bindingSpecifier.text)
@@ -402,8 +384,6 @@ private extension FileParser {
             fullDeclaration: decl
         )
     }
-
-    // MARK: - Initializer Conversion
 
     func convertInitializer(
         _ node: InitializerDeclSyntax,
@@ -447,8 +427,11 @@ private extension FileParser {
         )
     }
 
-    // MARK: - Child Extraction
+}
 
+// MARK: - Extraction
+
+private extension FileParser {
     func extractChildren(
         from memberBlock: MemberBlockSyntax,
         file: String,
@@ -484,8 +467,6 @@ private extension FileParser {
         return children
     }
 
-    // MARK: - swift-syntax Helpers
-
     /// Extracts attribute names from a syntax node that conforms to `WithAttributesSyntax`.
     ///
     /// - Parameter node: A syntax node with attributes (e.g., `StructDeclSyntax`, `FunctionDeclSyntax`).
@@ -505,7 +486,11 @@ private extension FileParser {
         guard let clause else { return [] }
         return clause.inheritedTypes.map { $0.type.trimmedDescription }
     }
+}
 
+// MARK: - Other Helpers
+
+private extension FileParser {
     /// Formats declaration modifiers into human-readable strings.
     ///
     /// - Parameter modifiers: The modifier list from a swift-syntax declaration node.
@@ -520,8 +505,6 @@ private extension FileParser {
         }
     }
 
-    // MARK: - Bulk Parsing
-
     func parseFileResult(at path: String) -> Swift.Result<FileOverview, Error> {
         do {
             return .success(try parseFile(at: path))
@@ -529,8 +512,6 @@ private extension FileParser {
             return .failure(error)
         }
     }
-
-    // MARK: - Line Number Resolution
 
     func lineNumber(for node: some SyntaxProtocol, converter: SourceLocationConverter) -> Int {
         node.startLocation(converter: converter).line
