@@ -209,8 +209,9 @@ final class TypeReferenceFinder: SyntaxVisitor {
 
         let baseMatches = baseText == searchName
         let memberMatches = memberText == searchName
+        let fullMatches = fullText == searchName
 
-        guard baseMatches || memberMatches else {
+        guard baseMatches || memberMatches || fullMatches else {
             return .visitChildren
         }
 

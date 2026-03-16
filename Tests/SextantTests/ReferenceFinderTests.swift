@@ -151,6 +151,15 @@ struct ReferenceFinderTests {
         #expect(memberMatch.count == 1)
     }
 
+    @Test("MemberTypeSyntax: searching qualified name matches full member type")
+    func matchesMemberTypeByQualifiedName() {
+        let source = fixtureSource("TypeReferences")
+        let matches = parser.findReferences(to: "Foo.Bar", in: source, file: "TypeReferences.swift")
+        #expect(matches.count == 1)
+        #expect(matches.first?.name == "Foo.Bar")
+        #expect(matches.first?.position == .typeAnnotation)
+    }
+
     @Test("MemberTypeSyntax: searching member name matches full member type")
     func matchesMemberTypeByMemberName() {
         let source = fixtureSource("TypeReferences")
