@@ -1,20 +1,16 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_type:
-        description: Type of release
-        type: choice
-        required: true
-        options:
-          - patch
-          - minor
-          - major
+  pull_request:
+    types:
+      - closed
+    branches:
+      - 'main'
 
 jobs:
   test:
     name: Test
+    if: github.event.pull_request.merged == true && github.head_ref == 'release'
     uses: ./.github/workflows/test.yml
 
   build-macos:
@@ -58,34 +54,12 @@ jobs:
       - name: Git checkout
         uses: actions/checkout@v6
 
-      - name: Get latest release version
-        id: get_current_version
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const { data: { tag_name } } = await github.rest.repos.getLatestRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            })
-            return tag_name
-
-      - name: Bump version
-        id: bump
-        uses: mgacy/bump-version-action@v1
-        with:
-          release-type: ${{ inputs.release_type }}
-          version: ${{ steps.get_current_version.outputs.result }}
-
-      - name: Push tag
-        uses: actions/github-script@v8
-        with:
-          script: |
-            github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'refs/tags/${{ steps.bump.outputs.version }}',
-              sha: context.sha
-            })
+      - name: Get version
+        id: get-version
+        shell: bash
+        run: |
+          VERSION=$(grep -Eo '([0-9]+\.*)+'  Sources/sextant/Version.swift)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Download macOS artifacts
         uses: actions/download-artifact@v8
@@ -101,12 +75,23 @@ jobs:
           cd dist
           sha256sum sextant-* > SHA256SUMS
 
+      - name: Push tag
+        uses: actions/github-script@v8
+        with:
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'refs/tags/${{ steps.get-version.outputs.version }}',
+              sha: '${{ github.sha }}'
+            })
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.bump.outputs.version }}
+          tag_name: ${{ steps.get-version.outputs.version }}
           generate_release_notes: true
           files: |
             dist/sextant-macos-arm64
