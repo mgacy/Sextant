@@ -13,7 +13,7 @@ import SextantLib
 /// Scans and parses all Swift files at the given path concurrently.
 ///
 /// Files are parsed in parallel using a `TaskGroup`. Results are sorted by file path
-/// for deterministic output. Logs warnings to stderr for files that fail to parse.
+/// for deterministic output. Logs warnings to stderr for files that fail to read.
 /// Throws `ValidationError` if all files fail.
 ///
 /// - Parameters:
@@ -26,16 +26,16 @@ func scanAndParse(at path: String, relativeTo basePath: String? = nil) async thr
     let result = try await parser.parseFiles(in: path)
 
     for failure in result.failures {
-        fputs("warning: failed to parse \(failure.file): \(failure.error.localizedDescription)\n", stderr)
+        fputs("warning: failed to read \(failure.file): \(failure.error.localizedDescription)\n", stderr)
     }
 
     if !result.failures.isEmpty {
-        fputs("warning: \(result.failures.count) of \(result.totalCount) files could not be parsed\n", stderr)
+        fputs("warning: \(result.failures.count) of \(result.totalCount) files could not be read\n", stderr)
     }
 
     if result.allFailed {
         throw ValidationError(
-            "All \(result.totalCount) files failed to parse. Check file permissions and encoding."
+            "All \(result.totalCount) files failed to read. Check file permissions and encoding."
         )
     }
 
@@ -50,6 +50,51 @@ func scanAndParse(at path: String, relativeTo basePath: String? = nil) async thr
     }
 
     return result.overviews
+}
+
+/// Scans and finds type references at the given path concurrently.
+///
+/// Logs warnings to stderr for files that fail to read.
+/// Throws `ValidationError` if all files fail.
+///
+/// - Parameters:
+///   - name: The type name to search for.
+///   - path: A file or directory path to scan.
+///   - relativeTo: When provided, file paths in the returned matches are made relative to this path.
+/// - Returns: An array of reference matches.
+func scanAndFindReferences(
+    to name: String,
+    at path: String,
+    relativeTo basePath: String? = nil
+) async throws -> [ReferenceMatch] {
+    let parser = FileParser()
+    let result = try await parser.findReferences(to: name, in: path)
+
+    for failure in result.failures {
+        fputs("warning: failed to read \(failure.file): \(failure.error.localizedDescription)\n", stderr)
+    }
+
+    if !result.failures.isEmpty {
+        fputs("warning: \(result.failures.count) of \(result.totalCount) files could not be read\n", stderr)
+    }
+
+    if result.allFailed {
+        throw ValidationError(
+            "All \(result.totalCount) files failed to read. Check file permissions and encoding."
+        )
+    }
+
+    if let basePath {
+        let prefix = resolveBasePrefix(basePath)
+        return result.matches.map { match in
+            let relativePath = match.file.hasPrefix(prefix)
+                ? String(match.file.dropFirst(prefix.count))
+                : match.file
+            return match.with(file: relativePath)
+        }
+    }
+
+    return result.matches
 }
 
 /// Resolves a path to an absolute directory prefix ending with "/".
