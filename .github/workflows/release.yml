@@ -15,6 +15,7 @@ jobs:
 
   build-macos:
     name: Build macOS Binary
+    if: github.event.pull_request.merged == true && github.head_ref == 'release'
     runs-on: macos-15
     needs: test
     steps:
@@ -46,6 +47,7 @@ jobs:
 
   release:
     name: Release
+    if: github.event.pull_request.merged == true && github.head_ref == 'release'
     runs-on: ubuntu-latest
     needs: build-macos
     permissions:
@@ -58,7 +60,8 @@ jobs:
         id: get-version
         shell: bash
         run: |
-          VERSION=$(grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' Sources/sextant/Version.swift)
+          set -eo pipefail
+          VERSION=$(grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' Sources/sextant/Version.swift | tr -d '"' | head -1)
           if [ -z "$VERSION" ]; then
             echo "::error::Failed to extract version from Version.swift"
             exit 1
@@ -76,19 +79,45 @@ jobs:
 
       - name: Generate checksums
         run: |
+          set -eo pipefail
           cd dist
           sha256sum sextant-* > SHA256SUMS
+          test -s SHA256SUMS
 
       - name: Push tag
         uses: actions/github-script@v8
         with:
           script: |
-            github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'refs/tags/${{ steps.get-version.outputs.version }}',
-              sha: '${{ github.event.pull_request.merge_commit_sha }}'
-            })
+            const version = '${{ steps.get-version.outputs.version }}';
+            const sha = '${{ github.event.pull_request.merge_commit_sha }}' || '${{ github.sha }}';
+            if (!version || !sha) {
+              core.setFailed(`Missing version ("${version}") or SHA ("${sha}")`);
+              return;
+            }
+            const tag = `refs/tags/${version}`;
+            try {
+              await github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: tag,
+                sha: sha
+              });
+              core.info(`Created tag ${tag} at ${sha}`);
+            } catch (error) {
+              if (error.status === 422) {
+                core.warning(`Tag ${tag} already exists. Verifying it points to ${sha}...`);
+                const { data: ref } = await github.rest.git.getRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `tags/${version}`
+                });
+                if (ref.object.sha !== sha) {
+                  core.setFailed(`Tag ${tag} exists but points to ${ref.object.sha}, not ${sha}`);
+                }
+              } else {
+                throw error;
+              }
+            }
 
       - name: Create release
         uses: softprops/action-gh-release@v2

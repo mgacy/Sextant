@@ -29,16 +29,23 @@ jobs:
 
       - name: Bump Version file
         id: bump
+        env:
+          RELEASE_TYPE: ${{ inputs.release_type }}
         run: |
           set -eo pipefail
-          NEW_VERSION=$(swift package --allow-writing-to-package-directory version-file --target sextant --bump ${{ inputs.release_type }})
+          NEW_VERSION=$(swift package --allow-writing-to-package-directory version-file --target sextant --bump "$RELEASE_TYPE")
           if [ -z "$NEW_VERSION" ]; then
             echo "::error::version-file plugin returned empty output"
+            exit 1
+          fi
+          if ! [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version-file plugin returned unexpected format: '$NEW_VERSION'"
             exit 1
           fi
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Create pull request
+        id: create-pr
         uses: peter-evans/create-pull-request@v7
         with:
           commit-message: Bump Version.swift -> ${{ steps.bump.outputs.version }}
@@ -52,3 +59,11 @@ jobs:
           add-paths: Sources/sextant/Version.swift
           labels: ci
           draft: false
+
+      - name: Verify PR was created
+        run: |
+          if [ -z "${{ steps.create-pr.outputs.pull-request-number }}" ]; then
+            echo "::error::No pull request was created. Version.swift may not have changed."
+            exit 1
+          fi
+          echo "::notice::Created PR #${{ steps.create-pr.outputs.pull-request-number }}"
