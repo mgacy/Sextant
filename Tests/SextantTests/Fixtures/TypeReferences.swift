@@ -75,6 +75,7 @@ struct InitializerExample {
 
 struct MemberTypeExample {
     var state: Foo.Bar
+    var generic: Qux.Quux<Baz>
 }
 
 // MARK: - Closure type in annotation

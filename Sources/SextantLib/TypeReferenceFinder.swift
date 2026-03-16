@@ -220,7 +220,11 @@ final class TypeReferenceFinder: SyntaxVisitor {
         }
 
         recordMatch(name: fullText, position: position)
-        return .skipChildren
+        // Continue into children so that types in generic arguments are visited
+        // (e.g., searching "Baz" finds it in `Foo.Bar<Baz>`). This means
+        // `Foo.Bar<Foo>` can produce two matches when searching "Foo" — one for
+        // the member type and one for the generic argument.
+        return .visitChildren
     }
 }
 

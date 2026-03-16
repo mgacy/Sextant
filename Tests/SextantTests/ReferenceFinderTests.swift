@@ -177,6 +177,15 @@ struct ReferenceFinderTests {
         #expect(memberMatch.first?.position == .typeAnnotation)
     }
 
+    @Test("MemberTypeSyntax: finds type in generic argument")
+    func findsMemberTypeGenericArgument() {
+        let source = fixtureSource("TypeReferences")
+        let matches = parser.findReferences(to: "Baz", in: source, file: "TypeReferences.swift")
+        #expect(matches.count == 1)
+        #expect(matches.first?.name == "Baz")
+        #expect(matches.first?.position == .typeAnnotation)
+    }
+
     @Test("Closure type in annotation classified as typeAnnotation")
     func classifiesClosureTypeAsAnnotation() {
         let matches = findTargetTypeReferences()
