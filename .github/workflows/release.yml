@@ -58,7 +58,11 @@ jobs:
         id: get-version
         shell: bash
         run: |
-          VERSION=$(grep -Eo '([0-9]+\.*)+'  Sources/sextant/Version.swift)
+          VERSION=$(grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' Sources/sextant/Version.swift)
+          if [ -z "$VERSION" ]; then
+            echo "::error::Failed to extract version from Version.swift"
+            exit 1
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Download macOS artifacts
@@ -83,7 +87,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: 'refs/tags/${{ steps.get-version.outputs.version }}',
-              sha: '${{ github.sha }}'
+              sha: '${{ github.event.pull_request.merge_commit_sha }}'
             })
 
       - name: Create release

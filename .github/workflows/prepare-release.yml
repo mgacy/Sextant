@@ -30,7 +30,13 @@ jobs:
       - name: Bump Version file
         id: bump
         run: |
-          echo "version=$(swift package --allow-writing-to-package-directory version-file --target sextant --bump ${{ inputs.release_type }})" >> $GITHUB_OUTPUT
+          set -eo pipefail
+          NEW_VERSION=$(swift package --allow-writing-to-package-directory version-file --target sextant --bump ${{ inputs.release_type }})
+          if [ -z "$NEW_VERSION" ]; then
+            echo "::error::version-file plugin returned empty output"
+            exit 1
+          fi
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
@@ -43,5 +49,6 @@ jobs:
           title: '[CI] Prepare Version ${{ steps.bump.outputs.version }} Release'
           body: |
             Update `Version.swift` with bumped version number.
+          add-paths: Sources/sextant/Version.swift
           labels: ci
           draft: false
