@@ -116,6 +116,34 @@ sextant enum-cases Sources/ --pattern "Result<"
 
 The `--pattern` flag matches against `fullDeclaration`, so you can search by case name, associated value type, or any substring of the serialized form.
 
+### `references` — Type reference search
+
+Find where a type name appears in declaration-level positions (inheritance, parameters, return types, annotations, etc.) while ignoring references inside function bodies, initializers, and imports.
+
+```bash
+# Find all declaration-level references to "TargetType"
+sextant references TargetType --path Sources/
+
+# Filter by position
+sextant references TargetType --path Sources/ --position inheritance
+```
+
+```json
+[
+  {
+    "name": "TargetType",
+    "position": "inheritance",
+    "declarationName": "ConformingStruct",
+    "declarationKind": "struct",
+    "fullDeclaration": "struct ConformingStruct: TargetType",
+    "file": "Sources/App/Models.swift",
+    "line": 12
+  }
+]
+```
+
+**`--position` values:** `inheritance`, `associatedValue`, `parameterType`, `returnType`, `typeAnnotation`, `typealiasTarget`, `genericConstraint`
+
 ## Library
 
 The `SextantLib` library can be used independently:
@@ -139,6 +167,9 @@ let results = table.lookup(name: "State", kind: .struct)
 // Regex search over enum cases
 let query = StructuralQuery()
 let cases = try query.findEnumCases(matching: "Result<", in: overviews)
+
+// Find declaration-level type references
+let refs = try await parser.findReferences(to: "State", in: "Sources/")
 ```
 
 ### Key types
@@ -149,6 +180,7 @@ let cases = try query.findEnumCases(matching: "Result<", in: overviews)
 | `FileScanner` | Walks directories collecting `.swift` files (excludes `.build/`, `checkouts/`, etc.). |
 | `SymbolTable` | In-memory index for fast name-based lookup with optional kind filter. |
 | `StructuralQuery` | Regex-based enum case search and symbol-by-kind filtering. |
+| `ReferenceMatch` | A type reference found in a declaration-level position, with location and context. |
 | `Declaration` | A single declaration node with name, kind, line, attributes, conformances, and children. |
 | `FileOverview` | Top-level declarations for a file. |
 | `SymbolEntry` | A flattened symbol record for index lookups. |

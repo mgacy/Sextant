@@ -34,7 +34,7 @@ public struct ReferenceMatch: Codable, Equatable, Sendable {
     /// Parent chain for nested declarations (e.g., "ListReducer.State"). Empty for top-level.
     @OmitEmpty public var parentName: String
 
-    /// The declaration signature containing the reference (e.g., "case item(ItemReducer)").
+    /// The declaration signature containing the reference (e.g., "item(ItemReducer)").
     /// For declarations with bodies, the text before the opening brace is used.
     @OmitEmpty public var fullDeclaration: String
 

@@ -35,7 +35,7 @@ The library handles parsing and querying. **`FileParser` is the isolation bounda
 - **`SymbolTable`** — in-memory index built from `FileOverview`s. Keyed by name for exact-match lookup with optional kind filter.
 - **`StructuralQuery`** — regex-based enum case search against full serialized declarations, plus symbol-by-kind filtering.
 - **`TypeReferenceFinder`** — internal `SyntaxVisitor` subclass that finds type-position references (inheritance, parameters, return types, type annotations, typealias targets, generic constraints) while skipping function bodies, variable initializers, computed property bodies, and import statements. Used by `FileParser+References`.
-- **Models** (`FileOverview.swift`, `SymbolEntry.swift`, `ReferenceMatch.swift`, `ParseResult.swift`) — `Declaration`, `FileOverview`, `SymbolEntry`, `SymbolKind`, `ReferenceMatch`, `ReferencePosition`, `ParseResult`, `ParseFailure`, `ReferenceResult`. All `Codable`, `Equatable`, `Sendable`.
+- **Models** (`FileOverview.swift`, `SymbolEntry.swift`, `ReferenceMatch.swift`, `ParseResult.swift`) — `Declaration`, `FileOverview`, `SymbolEntry`, `SymbolKind`, `ReferenceMatch`, `ReferencePosition` are `Codable`, `Equatable`, `Sendable`. `ParseResult`, `ParseFailure`, `ReferenceResult` are `Sendable` only.
 - **Extensions** (`Collection+Utils.swift`) — `isNotEmpty` convenience on `Collection`.
 - **`@OmitEmpty`** (`OmitEmpty.swift`) — custom property wrapper used on `Declaration` fields to omit empty arrays/strings from JSON output. Uses `EmptyInitializable` protocol + `KeyedEncodingContainer`/`KeyedDecodingContainer` overloads.
 
