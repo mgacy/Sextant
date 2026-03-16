@@ -80,6 +80,14 @@ struct ReferenceFinderTests {
         #expect(generic.first?.name == "TargetType")
     }
 
+    @Test("Finds reference in inline generic parameter constraint")
+    func findsInlineGenericConstraintReference() {
+        let matches = findTargetTypeReferences()
+        let inline = matches.filter { $0.position == .genericConstraint && $0.declarationName == "inlineConstrained" }
+        #expect(inline.count == 1)
+        #expect(inline.first?.name == "TargetType")
+    }
+
     @Test("Finds reference in extension inheritance clause")
     func findsExtensionInheritanceReference() {
         let matches = findTargetTypeReferences()

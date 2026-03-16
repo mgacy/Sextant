@@ -86,6 +86,10 @@ struct ClosureExample {
 // MARK: - Import exclusion (cannot actually use `import struct` for TargetType,
 // but the visitor should skip ImportDeclSyntax regardless)
 
+// MARK: - Inline generic parameter constraint
+
+func inlineConstrained<T: TargetType>(value: T) {}
+
 // MARK: - Protocol associatedtype constraint
 
 protocol Container {

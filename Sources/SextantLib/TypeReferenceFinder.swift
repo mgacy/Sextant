@@ -250,10 +250,13 @@ private extension TypeReferenceFinder {
             if parent.is(TypeAnnotationSyntax.self) {
                 return .typeAnnotation
             }
+            if parent.is(GenericParameterSyntax.self) {
+                return .genericConstraint
+            }
             if parent.is(TypeAliasDeclSyntax.self) {
                 // Catches the RHS type (e.g., `typealias Alias = TargetType`). Inline generic
-                // parameter constraints (e.g., `<T: Foo>`) are classified as .inheritance by
-                // the InheritanceClauseSyntax check above; `where` constraints are classified
+                // parameter constraints (e.g., `<T: Foo>`) are classified as .genericConstraint
+                // by the GenericParameterSyntax check above; `where` constraints are classified
                 // as .genericConstraint by the GenericWhereClauseSyntax check below.
                 return .typealiasTarget
             }
