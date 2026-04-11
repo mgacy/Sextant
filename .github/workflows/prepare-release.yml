@@ -46,7 +46,7 @@ jobs:
 
       - name: Create pull request
         id: create-pr
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: Bump Version.swift -> ${{ steps.bump.outputs.version }}
           committer: GitHub <noreply@github.com>
