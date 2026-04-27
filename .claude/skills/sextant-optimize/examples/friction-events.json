@@ -1,0 +1,20 @@
+{
+  "events": [
+    {
+      "id": "friction-001",
+      "taskId": "delegate-tracing-home-details",
+      "source": {
+        "kind": "transcript",
+        "sessionRef": "claude-project/session-id",
+        "turn": 42
+      },
+      "category": "fallbackSearch",
+      "severity": "medium",
+      "evidence": "Tool User ran rg after Sextant because output did not expose reducer action handling context.",
+      "expectedToolBehavior": "A structural query should identify the parent enum case and enough declaration context to avoid broad text search.",
+      "suspectedFixLocus": "sextant",
+      "proposedFix": "Add or document output context that lets a Tool User identify parent reducer relationships without broad fallback search.",
+      "verified": true
+    }
+  ]
+}

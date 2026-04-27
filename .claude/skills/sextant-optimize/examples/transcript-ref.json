@@ -1,0 +1,11 @@
+{
+  "role": "tool-user",
+  "workerId": "worker-001",
+  "backend": "cmux_claude",
+  "workspaceRef": "workspace:5",
+  "claudeProject": "target-project-name",
+  "sessionId": "unknown-until-discovered",
+  "startedAt": "2026-04-26T23:40:20Z",
+  "completedAt": null,
+  "status": "pending"
+}

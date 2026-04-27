@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sextant.local/schemas/transcript-ref.schema.json",
+  "title": "Sextant Optimize Transcript Reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "workerId", "backend", "workspaceRef", "claudeProject", "sessionId", "startedAt", "completedAt", "status"],
+  "properties": {
+    "role": { "type": "string", "minLength": 1 },
+    "workerId": { "type": "string", "minLength": 1 },
+    "backend": { "type": "string", "minLength": 1 },
+    "workspaceRef": { "type": "string", "minLength": 1 },
+    "claudeProject": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "startedAt": { "type": "string", "minLength": 1 },
+    "completedAt": { "type": ["string", "null"] },
+    "status": { "enum": ["pending", "discovered", "missing", "failed"] }
+  }
+}

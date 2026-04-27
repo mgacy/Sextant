@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "runId": "20260426T234020Z",
+  "status": "running",
+  "currentIteration": 1,
+  "revision": 1,
+  "createdAt": "2026-04-26T23:40:20Z",
+  "updatedAt": "2026-04-26T23:55:00Z",
+  "toolState": {
+    "gitCommit": "abc123",
+    "version": "0.1.0",
+    "smokeTestPassed": true
+  },
+  "usage": {
+    "initialSevenDay": null,
+    "latestSevenDay": null,
+    "runDelta": null,
+    "budgetPercent": 25,
+    "fetchFailed": false
+  },
+  "workers": [],
+  "iterations": [],
+  "decision": {
+    "decision": "continue",
+    "reasons": [],
+    "nextPhase": "toolUser"
+  },
+  "errors": []
+}

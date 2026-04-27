@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sextant.local/schemas/friction-events.schema.json",
+  "title": "Sextant Optimize Friction Events",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["events"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "taskId", "source", "category", "severity", "evidence", "expectedToolBehavior", "suspectedFixLocus", "proposedFix", "verified"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "taskId": { "type": "string", "minLength": 1 },
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "sessionRef", "turn"],
+            "properties": {
+              "kind": { "enum": ["transcript", "report"] },
+              "sessionRef": { "type": "string", "minLength": 1 },
+              "turn": { "type": ["integer", "null"], "minimum": 0 }
+            }
+          },
+          "category": {
+            "enum": ["fallbackSearch", "failedAttempt", "manualFiltering", "largeOutput", "missingContext", "documentationGap", "interfaceMismatch", "performanceOrTruncation", "toolUserUnfamiliarity", "notSextantAppropriate"]
+          },
+          "severity": { "enum": ["low", "medium", "high"] },
+          "evidence": { "type": "string", "minLength": 1 },
+          "expectedToolBehavior": { "type": "string", "minLength": 1 },
+          "suspectedFixLocus": { "enum": ["sextant", "sextantDocs", "agentPrompt", "orchestrator", "harness", "targetCodebase", "none", "unknown"] },
+          "proposedFix": { "type": "string", "minLength": 1 },
+          "verified": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

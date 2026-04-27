@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sextant.local/schemas/worker-completion.schema.json",
+  "title": "Sextant Optimize Worker Completion Signal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "status", "transcriptRef", "artifacts", "summary"],
+  "properties": {
+    "role": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["succeeded", "failed", "blocked"] },
+    "transcriptRef": { "type": ["string", "null"] },
+    "artifacts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "summary": { "type": "string", "minLength": 1 }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "role": "tool-user",
+  "status": "succeeded",
+  "transcriptRef": "iteration-1/tool-user/transcript-ref.json",
+  "artifacts": [
+    "iteration-1/tool-user/report.md",
+    "iteration-1/tool-user/transcript-ref.json",
+    "iteration-1/tool-user/transcript-summary.json"
+  ],
+  "summary": "Completed delegate tracing task with one Sextant query and no fallback rg calls."
+}

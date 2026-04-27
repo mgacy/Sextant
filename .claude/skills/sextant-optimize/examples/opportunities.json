@@ -1,0 +1,16 @@
+{
+  "opportunities": [
+    {
+      "id": "opportunity-001",
+      "title": "Expose parent declaration context for enum case matches",
+      "sourceFrictionIds": ["friction-001"],
+      "suspectedFixLocus": "sextant",
+      "confidence": "high",
+      "expectedImpact": "Reduce fallback text search when tracing child reducer delegate handling.",
+      "recommendedNextStep": "Investigate whether enum case search can include parent declaration metadata without broad output expansion."
+    }
+  ],
+  "prioritized": [
+    "opportunity-001"
+  ]
+}
