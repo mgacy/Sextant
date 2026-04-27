@@ -10,7 +10,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 import session_ops
 
@@ -126,8 +126,14 @@ class MockSubprocessBackend:
 class CmuxClaudeBackend:
     name = "cmux_claude"
 
-    def __init__(self, *, dry_run: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        dry_run: bool = False,
+        runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    ) -> None:
         self.dry_run = dry_run
+        self.runner = runner
         self.commands: list[list[str]] = []
 
     def create_worker(self, worker_ref: dict) -> dict:
@@ -142,22 +148,85 @@ class CmuxClaudeBackend:
             **worker_ref,
             "workspaceRef": command.workspace_ref,
             "launchCommand": command.argv,
+            "claudeCommand": command.claude_command,
         }
         if self.dry_run:
             return {**launched, "dryRun": True}
-        process = subprocess.Popen(command.argv, cwd=worker_ref["cwd"], shell=False)
-        return {**launched, "pid": process.pid}
+        completed = self.runner(
+            command.argv,
+            cwd=worker_ref["cwd"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=120,
+            check=False,
+        )
+        if completed.returncode != 0:
+            message = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
+            raise BackendError(f"cmux worker launch failed: {message}")
+        workspace_ref = session_ops.parse_workspace_ref(completed.stdout, command.workspace_ref)
+        return {
+            **launched,
+            "workspaceRef": workspace_ref,
+            "launchReturnCode": completed.returncode,
+            "launchStdout": completed.stdout.strip(),
+            "launchStderr": completed.stderr.strip(),
+        }
 
     def poll_worker(self, worker_ref: dict) -> WorkerStatus:
-        return WorkerStatus(status="pending", summary="cmux polling is not available in dry-run helper")
+        if worker_ref.get("dryRun"):
+            return WorkerStatus(status="running", summary="dry-run cmux worker")
+        workspace_ref = worker_ref.get("workspaceRef")
+        if not workspace_ref:
+            return WorkerStatus(status="unknown", summary="cmux workspaceRef is missing")
+        completed = self.runner(
+            ["cmux", "surface-health", "--workspace", workspace_ref],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=60,
+            check=False,
+        )
+        if completed.returncode != 0:
+            message = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
+            return WorkerStatus(status="unknown", summary=f"cmux surface-health failed: {message}")
+        return WorkerStatus(status="running", summary=completed.stdout.strip() or "cmux workspace active")
 
     def read_worker_screen(self, worker_ref: dict, max_lines: int) -> ScreenSnapshot:
-        return ScreenSnapshot(lines=[])
+        if worker_ref.get("dryRun"):
+            return ScreenSnapshot(lines=[])
+        workspace_ref = worker_ref.get("workspaceRef")
+        if not workspace_ref:
+            return ScreenSnapshot(lines=[])
+        completed = self.runner(
+            ["cmux", "read-screen", "--workspace", workspace_ref, "--scrollback", "--lines", str(max_lines)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=60,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return ScreenSnapshot(lines=[])
+        return ScreenSnapshot(lines=completed.stdout.splitlines()[-max_lines:])
 
     def close_worker(self, worker_ref: dict) -> CloseResult:
         if worker_ref.get("dryRun"):
             return CloseResult(closed=True, status="dryRun")
-        return CloseResult(closed=False, status="manualCloseRequired")
+        workspace_ref = worker_ref.get("workspaceRef")
+        if not workspace_ref:
+            return CloseResult(closed=False, status="missingWorkspaceRef")
+        completed = self.runner(
+            ["cmux", "close-workspace", "--workspace", workspace_ref],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=120,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return CloseResult(closed=False, status="closeFailed", exit_code=completed.returncode)
+        return CloseResult(closed=True, status="closed", exit_code=completed.returncode)
 
 
 def backend_from_config(config: dict, *, mock_command: list[str] | None = None, dry_run: bool = False) -> WorkerBackend:
@@ -180,13 +249,26 @@ output_dir = Path(os.environ["SEXTANT_WORKER_OUTPUT_DIR"])
 output_rel = os.environ["SEXTANT_WORKER_OUTPUT_REL"]
 signal_path = Path(os.environ["SEXTANT_WORKER_SIGNAL_PATH"])
 role = os.environ["SEXTANT_WORKER_ROLE"]
-report = output_dir / "report.md"
-report.write_text("# Mock worker report\n", encoding="utf-8")
+required = {
+    "tool-user": ["report.md", "transcript-ref.json", "transcript-summary.json"],
+    "friction-miner": ["friction-events.json", "report.md"],
+    "evaluator": ["evaluation.md", "scorecard.json"],
+    "opportunity-generator": ["candidates.md", "prioritized.json"],
+    "critic": ["critique.md", "perturbation.md"],
+}.get(role, ["report.md"])
+for name in required:
+    path = output_dir / name
+    if path.exists():
+        continue
+    if name.endswith(".json"):
+        path.write_text("{}", encoding="utf-8")
+    else:
+        path.write_text(f"# Mock {role} {name}\n", encoding="utf-8")
 signal = {
     "role": role,
     "status": "succeeded",
-    "transcriptRef": f"{output_rel}/transcript-ref.json",
-    "artifacts": [f"{output_rel}/report.md", f"{output_rel}/transcript-ref.json"],
+    "transcriptRef": f"{output_rel}/transcript-ref.json" if role == "tool-user" else None,
+    "artifacts": [f"{output_rel}/{name}" for name in required],
     "summary": "Mock worker completed successfully.",
 }
 signal_path.write_text(json.dumps(signal), encoding="utf-8")

@@ -45,6 +45,19 @@ QUALITY_PENALTIES = {
     "invalid": 10,
 }
 
+CATEGORY_WEIGHTS = {
+    "fallbackSearch": 2,
+    "failedAttempt": 2,
+    "manualFiltering": 1,
+    "largeOutput": 1,
+    "missingContext": 2,
+    "documentationGap": 1,
+    "interfaceMismatch": 2,
+    "performanceOrTruncation": 2,
+    "toolUserUnfamiliarity": 1,
+    "notSextantAppropriate": 0,
+}
+
 
 class ScorecardError(ValueError):
     pass
@@ -114,7 +127,7 @@ def validate_friction_events(payload: dict) -> list[dict]:
     return events
 
 
-def validate_opportunities(payload: dict) -> list[dict]:
+def validate_opportunities(payload: dict, *, events_by_id: dict[str, dict] | None = None) -> list[dict]:
     payload = _require_object(payload, "opportunities payload")
     opportunities = payload.get("opportunities")
     prioritized = payload.get("prioritized")
@@ -140,6 +153,19 @@ def validate_opportunities(payload: dict) -> list[dict]:
             raise ScorecardError(f"opportunities[{index}].sourceFrictionIds must be non-empty")
         for source_id in source_ids:
             _require_non_empty_string(source_id, f"opportunities[{index}].sourceFrictionIds[]")
+            if events_by_id is not None:
+                event = events_by_id.get(source_id)
+                if event is None:
+                    raise ScorecardError(f"opportunities[{index}] references unknown friction event: {source_id}")
+                source = event.get("source", {})
+                if (
+                    event.get("verified") is not True
+                    or source.get("kind") != "transcript"
+                    or not event.get("evidence")
+                ):
+                    raise ScorecardError(
+                        f"opportunities[{index}] references friction event without verified transcript evidence: {source_id}"
+                    )
         _require_non_empty_string(opportunity.get("expectedImpact"), f"opportunities[{index}].expectedImpact")
         _require_non_empty_string(opportunity.get("recommendedNextStep"), f"opportunities[{index}].recommendedNextStep")
 
@@ -149,15 +175,29 @@ def validate_opportunities(payload: dict) -> list[dict]:
     return opportunities
 
 
-def high_confidence_opportunity_count(opportunities_payload: dict) -> int:
+def high_confidence_opportunity_count(
+    opportunities_payload: dict,
+    *,
+    friction_events_payload: dict | None = None,
+) -> int:
+    if friction_events_payload is not None:
+        events = validate_friction_events(friction_events_payload)
+        events_by_id = {event["id"]: event for event in events}
+    else:
+        validate_opportunities(opportunities_payload)
+        return 0
     return sum(
         1
-        for opportunity in validate_opportunities(opportunities_payload)
+        for opportunity in validate_opportunities(opportunities_payload, events_by_id=events_by_id)
         if opportunity["confidence"] == "high" and opportunity["suspectedFixLocus"] in HIGH_CONFIDENCE_LOCI
     )
 
 
-def score_task(metric: dict, new_friction_events: int = 0) -> dict:
+def _event_score(event: dict) -> int:
+    return CATEGORY_WEIGHTS[event["category"]] + (1 if event["severity"] == "high" else 0)
+
+
+def score_task(metric: dict, events: list[dict] | None = None, new_friction_events: int = 0) -> dict:
     metric = _require_object(metric, "task metric")
     task_id = _require_non_empty_string(metric.get("id"), "task.id")
     quality = metric.get("answerQuality")
@@ -180,21 +220,13 @@ def score_task(metric: dict, new_friction_events: int = 0) -> dict:
         )
     }
     previous = _require_non_negative_int(metric.get("previousFrictionScore", 0), f"{task_id}.previousFrictionScore")
+    task_events = events or []
     new_events = _require_non_negative_int(
-        metric.get("newFrictionEvents", new_friction_events),
+        metric.get("newFrictionEvents", len(task_events) if task_events else new_friction_events),
         f"{task_id}.newFrictionEvents",
     )
-
-    friction_score = (
-        counts["sextantQueries"]
-        + counts["fileReadsAfterTool"]
-        + (counts["fallbackRgQueries"] * 3)
-        + (counts["failedAttempts"] * 3)
-        + (counts["adHocScripts"] * 4)
-        + (counts["manualJsonFiltering"] * 2)
-        + (new_events * 2)
-        + QUALITY_PENALTIES[quality]
-    )
+    event_score = sum(_event_score(event) for event in task_events)
+    friction_score = event_score
 
     result = {
         "id": task_id,
@@ -202,6 +234,8 @@ def score_task(metric: dict, new_friction_events: int = 0) -> dict:
         "answerQuality": quality,
         **counts,
         "newFrictionEvents": new_events,
+        "eventFrictionScore": event_score,
+        "qualityPenaltyDiagnostic": QUALITY_PENALTIES[quality],
         "frictionScore": friction_score,
         "previousFrictionScore": previous,
         "delta": friction_score - previous,
@@ -234,16 +268,20 @@ def build_scorecard(
         raise ScorecardError("iteration must be a positive integer")
     _require_non_empty_string(compared_to, "compared_to")
     events = validate_friction_events(friction_events_payload)
-    events_by_task: dict[str, int] = defaultdict(int)
+    events_by_task: dict[str, list[dict]] = defaultdict(list)
     for event in events:
-        events_by_task[event["taskId"]] += 1
+        events_by_task[event["taskId"]].append(event)
 
-    tasks = [score_task(metric, new_friction_events=events_by_task.get(metric.get("id"), 0)) for metric in task_metrics]
+    tasks = [score_task(metric, events=events_by_task.get(metric.get("id"), [])) for metric in task_metrics]
     if not tasks:
         raise ScorecardError("task_metrics must not be empty")
 
     aggregate = aggregate_tasks(tasks)
-    aggregate["highConfidenceOpportunities"] = high_confidence_opportunity_count(opportunities_payload)
+    validate_opportunities(opportunities_payload, events_by_id={event["id"]: event for event in events})
+    aggregate["highConfidenceOpportunities"] = high_confidence_opportunity_count(
+        opportunities_payload,
+        friction_events_payload=friction_events_payload,
+    )
 
     grouped = {
         "controlled": aggregate_tasks([task for task in tasks if task["group"] == "controlled"]),
@@ -274,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--task-metrics", required=True)
     parser.add_argument("--friction-events", required=True)
     parser.add_argument("--opportunities", required=True)
+    parser.add_argument("--out")
     args = parser.parse_args(argv)
 
     try:
@@ -288,7 +327,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"scorecard failed: {error}", file=sys.stderr)
         return 2
 
-    print(json.dumps(scorecard, indent=2, sort_keys=True))
+    output = json.dumps(scorecard, indent=2, sort_keys=True) + "\n"
+    if args.out:
+        Path(args.out).write_text(output, encoding="utf-8")
+    else:
+        print(output, end="")
     return 0
 
 

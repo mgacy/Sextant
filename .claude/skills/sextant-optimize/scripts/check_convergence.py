@@ -142,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state", required=True)
     parser.add_argument("--config", required=True)
     parser.add_argument("--scorecard", required=True)
+    parser.add_argument("--out")
     args = parser.parse_args(argv)
 
     try:
@@ -154,7 +155,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"convergence failed: {error}", file=sys.stderr)
         return 2
 
-    print(json.dumps(decision, indent=2, sort_keys=True))
+    output = json.dumps(decision, indent=2, sort_keys=True) + "\n"
+    if args.out:
+        Path(args.out).write_text(output, encoding="utf-8")
+    else:
+        print(output, end="")
     return 0
 
 

@@ -10,6 +10,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import bootstrap
+import fetch_usage
 from path_safety import PathSafetyError, artifact_path, ensure_contained
 
 
@@ -107,6 +108,38 @@ class BootstrapGuardrailTests(unittest.TestCase):
             self.assertIn("cc-session-tool", context.exception.missing)
             self.assertIn("swift", context.exception.missing)
 
+    def test_prerequisites_run_concrete_commands_and_require_cmux_workspace(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = base_config(root, root)
+            calls = []
+
+            def fake_runner(argv, **kwargs):
+                calls.append(argv)
+                return completed(argv)
+
+            bootstrap.check_prerequisites(
+                config,
+                which=lambda name: f"/bin/{name}",
+                runner=fake_runner,
+                env={"CMUX_WORKSPACE_ID": "workspace:1"},
+            )
+
+            self.assertIn(["python3", "--version"], calls)
+            self.assertIn(["swift", "--version"], calls)
+            self.assertIn(["cc-session-tool", "--help"], calls)
+            self.assertIn(["cmux", "version"], calls)
+            self.assertIn(["claude", "--version"], calls)
+
+            with self.assertRaises(bootstrap.PrerequisiteError) as context:
+                bootstrap.check_prerequisites(
+                    config,
+                    which=lambda name: f"/bin/{name}",
+                    runner=fake_runner,
+                    env={},
+                )
+            self.assertIn("CMUX_WORKSPACE_ID", context.exception.missing)
+
     def test_run_directory_created_under_allowed_artifact_root(self):
         with tempfile.TemporaryDirectory() as temp:
             repo_root = Path(temp)
@@ -179,6 +212,41 @@ class BootstrapGuardrailTests(unittest.TestCase):
             self.assertEqual(usage["initialSevenDay"], 18.25)
             self.assertEqual(usage["latestSevenDay"], 18.25)
             self.assertEqual(usage["runDelta"], 0)
+
+    def test_usage_fetch_reports_fetch_failed_payload_as_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = base_config(root, root)
+
+            def failed_payload_runner(argv, **kwargs):
+                return completed(argv, stdout='{"sevenDay": 0, "fetchFailed": true}')
+
+            with self.assertRaises(bootstrap.BootstrapError):
+                bootstrap.fetch_usage_snapshot(config, repo_root=root, runner=failed_payload_runner)
+
+    def test_fetch_usage_oauth_path_reads_keychain_and_usage_api(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original_cache = fetch_usage.TOKEN_CACHE
+            fetch_usage.TOKEN_CACHE = Path(temp) / "token-cache"
+            calls = []
+
+            def fake_runner(argv, **kwargs):
+                calls.append(argv)
+                if argv[:3] == ["security", "find-generic-password", "-s"]:
+                    return completed(argv, stdout='{"claudeAiOauth":{"accessToken":"token-123"}}')
+                if argv and argv[0] == "curl":
+                    self.assertIn("authorization: Bearer token-123", argv)
+                    return completed(argv, stdout='{"seven_day":{"utilization":37}}')
+                return completed(argv, returncode=99, stderr="unexpected")
+
+            try:
+                usage = fetch_usage.fetch_oauth_usage(runner=fake_runner)
+            finally:
+                fetch_usage.TOKEN_CACHE = original_cache
+
+            self.assertEqual(usage, {"sevenDay": 37.0})
+            self.assertEqual(calls[0][0], "security")
+            self.assertEqual(calls[1][0], "curl")
 
 
 class PathSafetyTests(unittest.TestCase):

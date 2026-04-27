@@ -19,9 +19,9 @@ Coordinate bounded Sextant tool-friction evaluation runs. This skill is repo-loc
 4. Use `scripts/poll.py` primitives to poll each worker until completion, invalid signal, timeout, backend failure, or read-only diff invalidation. Close workers through the backend when polling says they are terminal or timed out.
 5. Run roles in this order for each iteration: Tool User, Friction Miner, Evaluator, Opportunity Generator, Critic.
 6. Use `scripts/extract_transcript.py` after Tool User completion when transcript refs need discovery or bounded transcript summaries.
-7. Use `scripts/scorecard.py` and `scripts/check_convergence.py` for validation, scoring, and continue/stop decisions.
-8. Use `scripts/state_ops.py` transitions for decisions, handoff readiness, and `waitingForExternalChange`.
-9. Use `scripts/resume.py` only after an external Sextant/tool change lands; resume must recapture tool state and create the next iteration.
+7. Use `scripts/scorecard.py --out ...` and `scripts/check_convergence.py --out ...` for validation, scoring, and durable continue/stop decisions.
+8. Use `scripts/state_ops.py` subcommands for decisions, iteration records, handoff readiness, `waitingForExternalChange`, and explicit rerun starts.
+9. Use `scripts/resume.py` only after an external Sextant/tool change lands; resume must recapture tool state, create the next iteration artifacts, and stop at `readyForRerun`.
 10. Report the current state, role summaries, stop reason, and handoff path. Do not continue past handoff without an external change.
 
 ## Script-Owned State
@@ -35,11 +35,15 @@ The coordinator may read artifacts and summarize them to the user, but must not 
 - worker records
 - phase or decision files owned by scripts
 
-Every state mutation must go through `state_ops.py`, `poll.py`, `worker_ops.py`, `check_convergence.py`, or `resume.py` with the current expected revision.
+Every state mutation must go through `state_ops.py`, `poll.py`, `worker_ops.py`, or `resume.py` with the current expected revision. `scorecard.py` and `check_convergence.py` may write their own JSON outputs but must not mutate `optimization-state.json`.
 
 ## Handoff Stop
 
 When convergence returns `decision: "stop"`, write or preserve the iteration handoff artifact under `iteration-<n>/handoff.md`, record the decision through `state_ops.py`, transition `running -> handoffReady -> waitingForExternalChange`, and stop. The handoff should point to evidence-backed artifacts rather than embedding a new research or implementation plan.
+
+## Live Safety
+
+For live `cmux_claude` runs, bootstrap must run from an environment with `CMUX_WORKSPACE_ID`, and required usage fetching must succeed through Claude Code OAuth credentials or an explicit override. A timed-out worker must be closed through `cmux close-workspace` before the timeout is recorded as terminal.
 
 ## Static Contracts
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -82,6 +83,8 @@ def check_prerequisites(
     config: dict,
     *,
     which: Callable[[str], str | None] = shutil.which,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    env: dict[str, str] | None = None,
     require_live_backend: bool = True,
 ) -> None:
     required = ["python3", "swift", "cc-session-tool"]
@@ -94,6 +97,41 @@ def check_prerequisites(
     missing = [tool for tool in required if which(tool) is None]
     if missing:
         raise PrerequisiteError(missing)
+
+    env = os.environ if env is None else env
+    workers = config.get("workers", {})
+    if require_live_backend and workers.get("backend") in {"cmux", "cmux_claude"}:
+        if not env.get("CMUX_WORKSPACE_ID"):
+            raise PrerequisiteError(["CMUX_WORKSPACE_ID"])
+
+    checks = [
+        ["python3", "--version"],
+        ["swift", "--version"],
+        ["cc-session-tool", "--help"],
+    ]
+    if require_live_backend and workers.get("backend") in {"cmux", "cmux_claude"}:
+        checks.append(["cmux", "version"])
+    if require_live_backend and workers.get("harness") == "claude":
+        checks.append(["claude", "--version"])
+
+    failed = []
+    for argv in checks:
+        try:
+            result = runner(
+                argv,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=120,
+                check=False,
+            )
+        except Exception:
+            failed.append(" ".join(argv))
+            continue
+        if result.returncode != 0:
+            failed.append(" ".join(argv))
+    if failed:
+        raise PrerequisiteError(failed)
 
     try:
         json.dumps({"json": True})
@@ -183,6 +221,8 @@ def fetch_usage_snapshot(
     try:
         payload = json.loads(result.stdout)
         usage = payload.get("usage", payload)
+        if usage.get("fetchFailed") is True:
+            raise ValueError("usage fetch reported fetchFailed=true")
         seven_day = usage["sevenDay"]
     except Exception as error:
         if usage_config.get("required", False):
@@ -234,9 +274,9 @@ def bootstrap(config_path: Path, *, repo_root: Path, skip_prerequisites: bool = 
 
     (run_dir / "run-config.json").write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
     (run_dir / "git-status.json").write_text(json.dumps(git_status, indent=2, sort_keys=True) + "\n")
-    (run_dir / "optimization-state.json").write_text(
-        json.dumps(initial_state(config, tool_state, usage, now=now), indent=2, sort_keys=True) + "\n"
-    )
+    import state_ops
+
+    state_ops.initialize_state(run_dir, initial_state(config, tool_state, usage, now=now))
     return run_dir
 
 

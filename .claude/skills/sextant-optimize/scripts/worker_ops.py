@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import argparse
+import sys
 from pathlib import Path
 
 import backend
@@ -22,6 +24,14 @@ ROLE_TEMPLATES = {
     "evaluator": "evaluator.md",
     "opportunity-generator": "opportunity-generator.md",
     "critic": "critic.md",
+}
+
+ROLE_REQUIRED_ARTIFACTS = {
+    "tool-user": ["report.md", "transcript-ref.json", "transcript-summary.json"],
+    "friction-miner": ["friction-events.json", "report.md"],
+    "evaluator": ["evaluation.md", "scorecard.json"],
+    "opportunity-generator": ["candidates.md", "prioritized.json"],
+    "critic": ["critique.md", "perturbation.md"],
 }
 
 
@@ -142,7 +152,7 @@ def launch_worker(
     now: str | None = None,
 ) -> dict:
     worker_ref = prepare_worker(run_dir=run_dir, config=config, role=role, iteration=iteration, task=task, now=now)
-    state_ops.record_worker_update(
+    prepared_state = state_ops.record_worker_update(
         run_dir,
         expected_revision=expected_revision,
         worker={**serializable_worker_ref(worker_ref), "status": "prepared"},
@@ -153,6 +163,12 @@ def launch_worker(
     write_json(Path(worker_ref["workerRefPath"]), launched)
     if launched.get("workspaceRef"):
         update_transcript_workspace(Path(worker_ref["transcriptRefPath"]), launched["workspaceRef"])
+    state_ops.record_worker_update(
+        run_dir,
+        expected_revision=prepared_state["revision"],
+        worker={**serializable_worker_ref(launched), "status": "launched"},
+        now=now,
+    )
     return launched
 
 
@@ -186,9 +202,21 @@ def validate_completion_signal(run_dir: str | Path, worker_ref: dict, payload: d
     paths = artifacts + ([transcript_ref] if transcript_ref else [])
     for relpath in paths:
         try:
-            artifact_path(run_dir, relpath)
+            resolved = artifact_path(run_dir, relpath)
         except PathSafetyError as error:
             raise WorkerError(f"worker completion artifact escapes run dir: {relpath}") from error
+        if not resolved.is_file():
+            raise WorkerError(f"worker completion artifact does not exist: {relpath}")
+
+    if payload["status"] == "succeeded":
+        output_rel = worker_ref["outputRelPath"]
+        required = {f"{output_rel}/{name}" for name in ROLE_REQUIRED_ARTIFACTS[worker_ref["role"]]}
+        present = set(artifacts)
+        missing = sorted(required - present)
+        if missing:
+            raise WorkerError(f"worker completion is missing required artifacts: {missing}")
+        if transcript_ref and transcript_ref not in present:
+            raise WorkerError("worker completion transcriptRef must also be listed in artifacts")
 
 
 def serializable_worker_ref(worker_ref: dict) -> dict:
@@ -209,3 +237,57 @@ def update_transcript_workspace(transcript_ref_path: Path, workspace_ref: str) -
 
 def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def load_json(path: str | Path) -> dict:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run", required=True)
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--role", required=True)
+    parser.add_argument("--iteration", required=True, type=int)
+    parser.add_argument("--task", required=True)
+    parser.add_argument("--expect-revision", type=int)
+    parser.add_argument("--dry-run", action="store_true")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("prepare")
+    subparsers.add_parser("launch")
+    args = parser.parse_args(argv)
+
+    try:
+        config = load_json(args.config)
+        task = load_json(args.task)
+        if args.command == "prepare":
+            result = prepare_worker(
+                run_dir=args.run,
+                config=config,
+                role=args.role,
+                iteration=args.iteration,
+                task=task,
+            )
+        else:
+            if args.expect_revision is None:
+                raise WorkerError("--expect-revision is required for launch")
+            worker_backend = backend.backend_from_config(config, dry_run=args.dry_run)
+            result = launch_worker(
+                run_dir=args.run,
+                config=config,
+                role=args.role,
+                iteration=args.iteration,
+                task=task,
+                expected_revision=args.expect_revision,
+                worker_backend=worker_backend,
+            )
+    except (WorkerError, state_ops.StateError, PathSafetyError, OSError, json.JSONDecodeError, backend.BackendError) as error:
+        print(f"worker operation failed: {error}", file=sys.stderr)
+        return 2
+
+    print(json.dumps({"ok": True, "worker": serializable_worker_ref(result)}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

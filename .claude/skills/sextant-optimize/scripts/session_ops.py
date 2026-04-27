@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -18,6 +19,7 @@ class SessionError(RuntimeError):
 class CmuxClaudeCommand:
     argv: list[str]
     workspace_ref: str
+    claude_command: list[str]
 
 
 def build_cmux_claude_command(
@@ -34,19 +36,44 @@ def build_cmux_claude_command(
     """
 
     workspace_ref = f"cmux:{worker_id}"
+    claude_command = ["claude", "--file", str(prompt_path)]
     argv = [
         "cmux",
-        "new",
+        "new-workspace",
         "--name",
         worker_id,
         "--cwd",
         str(cwd),
-        "--",
-        "claude",
-        "--file",
-        str(prompt_path),
+        "--command",
+        shlex.join(claude_command),
     ]
-    return CmuxClaudeCommand(argv=argv, workspace_ref=workspace_ref)
+    return CmuxClaudeCommand(argv=argv, workspace_ref=workspace_ref, claude_command=claude_command)
+
+
+def parse_workspace_ref(stdout: str, fallback: str) -> str:
+    """Extract a cmux workspace ref from CLI stdout.
+
+    cmux usually prints refs such as `workspace:2`. Some versions include JSON
+    or surrounding text, so accept either a direct ref or a JSON field while
+    falling back to the deterministic worker-derived ref used by dry-run tests.
+    """
+
+    text = stdout.strip()
+    if not text:
+        return fallback
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        for key in ("workspaceRef", "workspace", "ref", "id"):
+            value = payload.get(key)
+            if isinstance(value, str) and value:
+                return value
+    for token in text.replace(",", " ").split():
+        if token.startswith("workspace:"):
+            return token
+    return fallback
 
 
 def initial_transcript_ref(

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Callable
@@ -56,32 +57,54 @@ def resume_after_external_change(
         raise NoExternalChangeError("no external tool-state change detected")
 
     next_iteration = int(state["currentIteration"]) + 1
-    iteration_dir = artifact_path(run_dir, f"iteration-{next_iteration}")
-    iteration_dir.mkdir(parents=False, exist_ok=False)
-    artifact_path(run_dir, f"iteration-{next_iteration}/git-status.json").write_text(
-        json.dumps(git_status, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
     external_change = {
         "ref": external_change_ref,
         "previousToolState": previous_tool_state,
         "recapturedToolState": recaptured_tool_state,
     }
-    ready_state = state_ops.mark_ready_for_rerun(
-        run_dir,
-        expected_revision=state["revision"],
-        external_change=external_change,
-    )
-    running_state = state_ops.start_rerun(
-        run_dir,
-        expected_revision=ready_state["revision"],
-        tool_state=recaptured_tool_state,
-    )
+    iteration_dir = artifact_path(run_dir, f"iteration-{next_iteration}")
+    try:
+        iteration_dir.mkdir(parents=False, exist_ok=False)
+        artifact_path(run_dir, f"iteration-{next_iteration}/git-status.json").write_text(
+            json.dumps(git_status, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        tool_state_path = artifact_path(run_dir, f"iteration-{next_iteration}/tool-state.md")
+        tool_state_json_path = artifact_path(run_dir, f"iteration-{next_iteration}/tool-state.json")
+        tool_state_path.write_text(
+            "\n".join(
+                [
+                    f"# Tool State for Iteration {next_iteration}",
+                    "",
+                    f"- External change: `{external_change_ref}`",
+                    f"- Previous commit: `{previous_tool_state.get('gitCommit')}`",
+                    f"- Recaptured commit: `{recaptured_tool_state.get('gitCommit')}`",
+                    f"- Recaptured version: `{recaptured_tool_state.get('version')}`",
+                    f"- Smoke test passed: `{recaptured_tool_state.get('smokeTestPassed')}`",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        tool_state_json_path.write_text(
+            json.dumps(recaptured_tool_state, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        ready_state = state_ops.mark_ready_for_rerun(
+            run_dir,
+            expected_revision=state["revision"],
+            external_change=external_change,
+        )
+    except Exception:
+        if iteration_dir.exists():
+            shutil.rmtree(iteration_dir)
+        raise
     return {
-        "state": running_state,
+        "state": ready_state,
         "iterationDir": str(iteration_dir),
         "gitStatusPath": str(artifact_path(run_dir, f"iteration-{next_iteration}/git-status.json")),
+        "toolStatePath": str(artifact_path(run_dir, f"iteration-{next_iteration}/tool-state.md")),
+        "toolStateJsonPath": str(artifact_path(run_dir, f"iteration-{next_iteration}/tool-state.json")),
     }
 
 

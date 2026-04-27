@@ -29,11 +29,11 @@ The coordinator is responsible for sequencing scripts, not for editing state by 
 
 1. Create a run-specific `run-config.json` from `templates/run-config.json`.
 2. Bootstrap the run directory with `scripts/bootstrap.py`.
-3. For each iteration, launch and poll one role at a time: Tool User, Friction Miner, Evaluator, Opportunity Generator, Critic.
+3. For each iteration, launch and poll one role at a time through `scripts/worker_ops.py` and `scripts/poll.py`: Tool User, Friction Miner, Evaluator, Opportunity Generator, Critic.
 4. Extract transcript summaries after Tool User completion when transcript discovery is needed.
-5. Validate friction events, opportunities, and scorecards with `scripts/scorecard.py`.
-6. Compute the stop/continue decision with `scripts/check_convergence.py`.
-7. On stop, preserve `iteration-<n>/decision.json` and `iteration-<n>/handoff.md`, then transition `running -> handoffReady -> waitingForExternalChange` through `scripts/state_ops.py`.
+5. Validate friction events, opportunities, and scorecards with `scripts/scorecard.py --out iteration-<n>/evaluator/scorecard.json`.
+6. Compute the stop/continue decision with `scripts/check_convergence.py --out iteration-<n>/decision.json`.
+7. On stop, preserve `iteration-<n>/decision.json` and `iteration-<n>/handoff.md`, record the decision with `scripts/state_ops.py record-decision`, then transition `running -> handoffReady -> waitingForExternalChange` through `scripts/state_ops.py transition`.
 8. Resume only with `scripts/resume.py` after an external Sextant/tool change is available.
 
 ## Mock Dry Run
@@ -90,12 +90,30 @@ Use only after the full test suite and mock dry-run test pass. Keep the first li
 python3 .claude/skills/sextant-optimize/scripts/bootstrap.py --config .claude-tracking/tool-eval-runs/<run-id>/run-config.json --repo-root .
 ```
 
-Then launch/poll role workers through the coordinator skill flow. Confirm that all generated files stay under `.claude-tracking/tool-eval-runs/<run-id>/`, `optimization-state.json` changes only through scripts, and the run stops at `waitingForExternalChange` after handoff.
+For live `cmux` runs, start from a cmux terminal so `CMUX_WORKSPACE_ID` is present. Required usage tracking reads Claude Code OAuth credentials from Keychain and fails closed if usage cannot be fetched; tests and controlled local runs may use `SEXTANT_OPTIMIZE_USAGE_SEVEN_DAY` or `fetch_usage.py --usage-file`.
+
+Then use the script entrypoints directly:
+
+```bash
+python3 .claude/skills/sextant-optimize/scripts/worker_ops.py --run <run-dir> --config <run-dir>/run-config.json --role tool-user --iteration 1 --task <task.json> --expect-revision <n> launch
+python3 .claude/skills/sextant-optimize/scripts/poll.py --run <run-dir> --config <run-dir>/run-config.json --worker-ref <run-dir>/iteration-1/tool-user/worker-ref.json --expect-revision <n> poll
+python3 .claude/skills/sextant-optimize/scripts/scorecard.py --iteration 1 --compared-to baseline --task-metrics <metrics.json> --friction-events <events.json> --opportunities <opportunities.json> --out <run-dir>/iteration-1/evaluator/scorecard.json
+python3 .claude/skills/sextant-optimize/scripts/check_convergence.py --state <run-dir>/optimization-state.json --config <run-dir>/run-config.json --scorecard <run-dir>/iteration-1/evaluator/scorecard.json --out <run-dir>/iteration-1/decision.json
+python3 .claude/skills/sextant-optimize/scripts/state_ops.py --run <run-dir> --expect-revision <n> record-decision --decision <run-dir>/iteration-1/decision.json
+```
+
+Confirm that all generated files stay under `.claude-tracking/tool-eval-runs/<run-id>/`, `optimization-state.json` changes only through scripts, timed-out live workers are closed by cmux, and the run stops at `waitingForExternalChange` after handoff.
 
 ## Resume Surface
 
 ```bash
 python3 .claude/skills/sextant-optimize/scripts/resume.py --run-id <run-id> --repo-root . --external-change-ref <git-ref-or-note>
+```
+
+Resume stops at `readyForRerun` after creating `iteration-<next>/tool-state.md` and `iteration-<next>/tool-state.json`; start the next run explicitly:
+
+```bash
+python3 .claude/skills/sextant-optimize/scripts/state_ops.py --run <run-dir> --expect-revision <n> start-rerun --tool-state <run-dir>/iteration-<next>/tool-state.json
 ```
 
 The coordinator must use scripts for state transitions. It must not edit `optimization-state.json`, prompts, completion signals, transcript refs, phase files, or worker records directly.

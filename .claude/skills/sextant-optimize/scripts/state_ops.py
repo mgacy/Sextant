@@ -59,6 +59,21 @@ def read_state(run_dir: str | Path) -> dict:
         return json.load(handle)
 
 
+def initialize_state(run_dir: str | Path, state: dict) -> dict:
+    run_root = canonical_path(run_dir)
+    path = state_path(run_root)
+    if path.exists():
+        raise StateError(f"state already exists: {path}")
+    payload = copy.deepcopy(state)
+    payload.setdefault("revision", 1)
+    payload.setdefault("updatedAt", payload.get("createdAt") or utc_now())
+    with state_lock(run_root):
+        if path.exists():
+            raise StateError(f"state already exists: {path}")
+        atomic_write_json(path, payload)
+    return payload
+
+
 @contextmanager
 def state_lock(run_dir: str | Path):
     run_root = canonical_path(run_dir)
@@ -288,6 +303,14 @@ def main(argv: list[str] | None = None) -> int:
 
     transition_parser = subparsers.add_parser("transition")
     transition_parser.add_argument("--status", required=True)
+    decision_parser = subparsers.add_parser("record-decision")
+    decision_parser.add_argument("--decision", required=True)
+    iteration_parser = subparsers.add_parser("record-iteration")
+    iteration_parser.add_argument("--iteration", required=True, type=int)
+    iteration_parser.add_argument("--scorecard", required=True)
+    iteration_parser.add_argument("--artifact", action="append", default=[])
+    rerun_parser = subparsers.add_parser("start-rerun")
+    rerun_parser.add_argument("--tool-state", required=True)
 
     args = parser.parse_args(argv)
     try:
@@ -296,6 +319,26 @@ def main(argv: list[str] | None = None) -> int:
                 canonical_path(args.run),
                 expected_revision=args.expect_revision,
                 new_status=args.status,
+            )
+        elif args.command == "record-decision":
+            state = record_decision(
+                canonical_path(args.run),
+                expected_revision=args.expect_revision,
+                decision=json.loads(Path(args.decision).read_text(encoding="utf-8")),
+            )
+        elif args.command == "record-iteration":
+            state = record_iteration_result(
+                canonical_path(args.run),
+                expected_revision=args.expect_revision,
+                iteration=args.iteration,
+                scorecard_path=args.scorecard,
+                artifacts=args.artifact,
+            )
+        elif args.command == "start-rerun":
+            state = start_rerun(
+                canonical_path(args.run),
+                expected_revision=args.expect_revision,
+                tool_state=json.loads(Path(args.tool_state).read_text(encoding="utf-8")),
             )
         else:
             raise StateError(f"unsupported command: {args.command}")

@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stdout
+from io import StringIO
 import unittest
 from pathlib import Path
 
@@ -215,6 +217,42 @@ class StateOperationTests(unittest.TestCase):
 
             self.assertEqual(state["iterations"][0]["scorecard"], "iteration-1/evaluator/scorecard.json")
 
+    def test_state_ops_cli_records_decision_iteration_and_starts_rerun(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp)
+            decision = fixture.run_dir / "decision.json"
+            write_json(decision, {"decision": "continue", "reasons": [], "nextPhase": "toolUser"})
+
+            with redirect_stdout(StringIO()):
+                decision_result = state_ops.main([
+                    "--run",
+                    str(fixture.run_dir),
+                    "--expect-revision",
+                    "1",
+                    "record-decision",
+                    "--decision",
+                    str(decision),
+                ])
+            self.assertEqual(decision_result, 0)
+            scorecard = fixture.run_dir / "iteration-1" / "evaluator" / "scorecard.json"
+            scorecard.parent.mkdir(parents=True)
+            write_json(scorecard, {"ok": True})
+            with redirect_stdout(StringIO()):
+                iteration_result = state_ops.main([
+                    "--run",
+                    str(fixture.run_dir),
+                    "--expect-revision",
+                    "2",
+                    "record-iteration",
+                    "--iteration",
+                    "1",
+                    "--scorecard",
+                    "iteration-1/evaluator/scorecard.json",
+                    "--artifact",
+                    "iteration-1/evaluator/scorecard.json",
+                ])
+            self.assertEqual(iteration_result, 0)
+
 
 class ResumeFlowTests(unittest.TestCase):
     def waiting_state(self, fixture):
@@ -265,13 +303,14 @@ class ResumeFlowTests(unittest.TestCase):
             )
 
             state = result["state"]
-            self.assertEqual(state["status"], "running")
-            self.assertEqual(state["currentIteration"], 2)
-            self.assertEqual(state["revision"], 6)
-            self.assertEqual(state["toolState"]["gitCommit"], "def456")
-            self.assertEqual(state["toolState"]["version"], "0.2.0")
+            self.assertEqual(state["status"], "readyForRerun")
+            self.assertEqual(state["currentIteration"], 1)
+            self.assertEqual(state["revision"], 5)
+            self.assertEqual(state["toolState"]["gitCommit"], "abc123")
             self.assertTrue((fixture.run_dir / "iteration-2").is_dir())
             self.assertTrue((fixture.run_dir / "iteration-2" / "git-status.json").is_file())
+            self.assertTrue((fixture.run_dir / "iteration-2" / "tool-state.md").is_file())
+            self.assertTrue((fixture.run_dir / "iteration-2" / "tool-state.json").is_file())
             self.assertEqual(state["iterations"][-1]["directory"], "iteration-2")
             self.assertEqual(state["iterations"][-1]["externalChange"]["ref"], "commit:def456")
             self.assertEqual(state["iterations"][-1]["externalChange"]["previousToolState"]["gitCommit"], "abc123")
@@ -279,6 +318,14 @@ class ResumeFlowTests(unittest.TestCase):
                 state["iterations"][-1]["externalChange"]["recapturedToolState"]["gitCommit"],
                 "def456",
             )
+
+            running = state_ops.start_rerun(
+                fixture.run_dir,
+                expected_revision=state["revision"],
+                tool_state=json.loads((fixture.run_dir / "iteration-2" / "tool-state.json").read_text()),
+            )
+            self.assertEqual(running["status"], "running")
+            self.assertEqual(running["currentIteration"], 2)
 
 
 if __name__ == "__main__":

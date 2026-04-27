@@ -1,4 +1,8 @@
 import sys
+import json
+import tempfile
+from contextlib import redirect_stdout
+from io import StringIO
 import unittest
 from pathlib import Path
 
@@ -170,25 +174,23 @@ class ScorecardValidationTests(unittest.TestCase):
         )
 
         self.assertTrue(unsupported["aggregate"]["evaluationInvalid"])
-        self.assertEqual(unsupported["tasks"][0]["frictionScore"], 12)
+        self.assertEqual(unsupported["tasks"][0]["frictionScore"], 0)
+        self.assertEqual(unsupported["tasks"][0]["qualityPenaltyDiagnostic"], 10)
 
-    def test_scoring_rubric_weights_fallbacks_failures_scripts_filtering_and_quality(self):
+    def test_scoring_rubric_uses_event_category_and_severity_weights(self):
         scored = scorecard.score_task(
-            task_metric(
-                answerQuality="partial",
-                sextantQueries=2,
-                fallbackRgQueries=1,
-                fileReadsAfterTool=3,
-                failedAttempts=1,
-                adHocScripts=1,
-                manualJsonFiltering=2,
-                newFrictionEvents=1,
-                previousFrictionScore=25,
-            )
+            task_metric(previousFrictionScore=8),
+            events=[
+                event(id="friction-001", category="fallbackSearch", severity="medium"),
+                event(id="friction-002", category="documentationGap", severity="low"),
+                event(id="friction-003", category="performanceOrTruncation", severity="high"),
+            ],
         )
 
-        self.assertEqual(scored["frictionScore"], 25)
-        self.assertEqual(scored["delta"], 0)
+        self.assertEqual(scored["frictionScore"], 6)
+        self.assertEqual(scored["eventFrictionScore"], 6)
+        self.assertEqual(scored["newFrictionEvents"], 3)
+        self.assertEqual(scored["delta"], -2)
 
     def test_controlled_and_perturbed_aggregates_are_separate(self):
         built = scorecard.build_scorecard(
@@ -204,26 +206,96 @@ class ScorecardValidationTests(unittest.TestCase):
                     previousFrictionScore=3,
                 ),
             ],
-            friction_events_payload=friction_events(event(taskId="controlled-task")),
+            friction_events_payload=friction_events(
+                event(id="friction-001", taskId="controlled-task"),
+                event(
+                    id="friction-002",
+                    taskId="perturbed-task",
+                    category="performanceOrTruncation",
+                    severity="high",
+                ),
+            ),
             opportunities_payload=opportunities(opportunity()),
         )
 
-        self.assertEqual(built["controlled"]["frictionScore"], 4)
-        self.assertEqual(built["controlled"]["delta"], -4)
-        self.assertEqual(built["perturbed"]["frictionScore"], 9)
-        self.assertEqual(built["perturbed"]["regressions"], 1)
+        self.assertEqual(built["controlled"]["frictionScore"], 2)
+        self.assertEqual(built["controlled"]["delta"], -6)
+        self.assertEqual(built["perturbed"]["frictionScore"], 3)
+        self.assertEqual(built["perturbed"]["regressions"], 0)
         self.assertEqual(built["aggregate"]["highConfidenceOpportunities"], 1)
 
-    def test_high_confidence_opportunity_count_excludes_low_confidence_and_non_tool_loci(self):
+    def test_high_confidence_opportunity_count_requires_verified_friction_evidence(self):
+        with self.assertRaisesRegex(scorecard.ScorecardError, "unknown friction event"):
+            scorecard.high_confidence_opportunity_count(
+                opportunities(opportunity(sourceFrictionIds=["missing"])),
+                friction_events_payload=friction_events(event()),
+            )
+
+        with self.assertRaisesRegex(scorecard.ScorecardError, "verified transcript evidence"):
+            scorecard.high_confidence_opportunity_count(
+                opportunities(opportunity(sourceFrictionIds=["friction-001"])),
+                friction_events_payload=friction_events(event(verified=False)),
+            )
+
         count = scorecard.high_confidence_opportunity_count(
             opportunities(
                 opportunity(id="opportunity-001", confidence="high", suspectedFixLocus="sextant"),
                 opportunity(id="opportunity-002", confidence="medium", suspectedFixLocus="sextant"),
                 opportunity(id="opportunity-003", confidence="high", suspectedFixLocus="targetCodebase"),
-            )
+            ),
+            friction_events_payload=friction_events(event()),
         )
 
         self.assertEqual(count, 1)
+
+    def test_scorecard_and_convergence_clis_persist_outputs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            metrics = root / "metrics.json"
+            events = root / "events.json"
+            opps = root / "opportunities.json"
+            score_out = root / "scorecard.json"
+            state_path = root / "state.json"
+            config_path = root / "config.json"
+            decision_out = root / "decision.json"
+
+            metrics.write_text(json.dumps({"tasks": [task_metric(previousFrictionScore=8)]}), encoding="utf-8")
+            events.write_text(json.dumps(friction_events(event())), encoding="utf-8")
+            opps.write_text(json.dumps(opportunities(opportunity())), encoding="utf-8")
+
+            with redirect_stdout(StringIO()):
+                score_result = scorecard.main([
+                    "--iteration",
+                    "1",
+                    "--compared-to",
+                    "baseline",
+                    "--task-metrics",
+                    str(metrics),
+                    "--friction-events",
+                    str(events),
+                    "--opportunities",
+                    str(opps),
+                    "--out",
+                    str(score_out),
+                ])
+            self.assertEqual(score_result, 0)
+            self.assertTrue(score_out.is_file())
+            state_path.write_text(json.dumps(state(iteration=1)), encoding="utf-8")
+            config_path.write_text(json.dumps(config(maxIterations=3)), encoding="utf-8")
+
+            with redirect_stdout(StringIO()):
+                convergence_result = check_convergence.main([
+                    "--state",
+                    str(state_path),
+                    "--config",
+                    str(config_path),
+                    "--scorecard",
+                    str(score_out),
+                    "--out",
+                    str(decision_out),
+                ])
+            self.assertEqual(convergence_result, 0)
+            self.assertEqual(json.loads(decision_out.read_text(encoding="utf-8"))["decision"], "stop")
 
 
 class ConvergenceDecisionTests(unittest.TestCase):
