@@ -85,7 +85,7 @@ jobs:
           test -s SHA256SUMS
 
       - name: Push tag
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const version = '${{ steps.get-version.outputs.version }}';
@@ -120,7 +120,7 @@ jobs:
             }
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
