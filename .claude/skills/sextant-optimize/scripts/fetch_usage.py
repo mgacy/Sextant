@@ -9,6 +9,7 @@ import os
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -69,26 +70,32 @@ def _oauth_token_from_keychain(*, runner=subprocess.run) -> str:
 
 def fetch_oauth_usage(*, runner=subprocess.run) -> dict:
     token = _oauth_token_from_keychain(runner=runner)
-    completed = runner(
-        [
-            "curl",
-            "-s",
-            "-m",
-            "5",
-            "-H",
-            "accept: application/json",
-            "-H",
-            "anthropic-beta: oauth-2025-04-20",
-            "-H",
-            f"authorization: Bearer {token}",
-            "https://api.anthropic.com/oauth/usage",
-        ],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=30,
-        check=False,
-    )
+    header_fd, header_path = tempfile.mkstemp(prefix=".sextant_usage_header.")
+    try:
+        with os.fdopen(header_fd, "w", encoding="utf-8") as handle:
+            handle.write(f"authorization: Bearer {token}\n")
+        completed = runner(
+            [
+                "curl",
+                "-s",
+                "-m",
+                "5",
+                "-H",
+                "accept: application/json",
+                "-H",
+                "anthropic-beta: oauth-2025-04-20",
+                "-H",
+                f"@{header_path}",
+                "https://api.anthropic.com/oauth/usage",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+    finally:
+        os.unlink(header_path)
     if completed.returncode != 0:
         raise ValueError("usage API request failed")
     payload = json.loads(completed.stdout)

@@ -50,17 +50,18 @@ def build_cmux_claude_command(
     return CmuxClaudeCommand(argv=argv, workspace_ref=workspace_ref, claude_command=claude_command)
 
 
-def parse_workspace_ref(stdout: str, fallback: str) -> str:
+def parse_workspace_ref(stdout: str) -> str | None:
     """Extract a cmux workspace ref from CLI stdout.
 
     cmux usually prints refs such as `workspace:2`. Some versions include JSON
-    or surrounding text, so accept either a direct ref or a JSON field while
-    falling back to the deterministic worker-derived ref used by dry-run tests.
+    or surrounding text, so accept either a direct ref or a JSON field. Returns
+    None when stdout contains no recognizable ref so callers can fail instead
+    of silently targeting a fabricated workspace.
     """
 
     text = stdout.strip()
     if not text:
-        return fallback
+        return None
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
@@ -73,7 +74,7 @@ def parse_workspace_ref(stdout: str, fallback: str) -> str:
     for token in text.replace(",", " ").split():
         if token.startswith("workspace:"):
             return token
-    return fallback
+    return None
 
 
 def initial_transcript_ref(

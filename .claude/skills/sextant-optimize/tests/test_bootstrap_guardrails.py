@@ -1,3 +1,5 @@
+import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -235,7 +237,15 @@ class BootstrapGuardrailTests(unittest.TestCase):
                 if argv[:3] == ["security", "find-generic-password", "-s"]:
                     return completed(argv, stdout='{"claudeAiOauth":{"accessToken":"token-123"}}')
                 if argv and argv[0] == "curl":
-                    self.assertIn("authorization: Bearer token-123", argv)
+                    self.assertTrue(all("token-123" not in arg for arg in argv))
+                    header_args = [arg for arg in argv if arg.startswith("@")]
+                    self.assertEqual(len(header_args), 1)
+                    header_file = Path(header_args[0][1:])
+                    self.assertEqual(
+                        header_file.read_text(encoding="utf-8").strip(),
+                        "authorization: Bearer token-123",
+                    )
+                    self.assertEqual(stat.S_IMODE(os.stat(header_file).st_mode), 0o600)
                     return completed(argv, stdout='{"seven_day":{"utilization":37}}')
                 return completed(argv, returncode=99, stderr="unexpected")
 

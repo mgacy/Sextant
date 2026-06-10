@@ -21,6 +21,11 @@ class PollError(RuntimeError):
     pass
 
 
+# Poll releases the backend workspace for these terminal statuses itself;
+# succeeded/blocked workers stay open for the orchestrator to inspect and close.
+CLOSE_ON_POLL_STATUSES = {"timedOut", "invalidSignal", "failed", "invalidatedByDiff"}
+
+
 def parse_utc(timestamp: str) -> datetime:
     return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
@@ -66,16 +71,21 @@ def poll_worker(
         final_status = backend_status.status
         summary = backend_status.summary
 
-    close_update = None
-    if final_status == "timedOut":
+    def close_workspace() -> dict:
         close_result = worker_backend.close_worker(worker_ref)
-        close_update = {
+        if not close_result.closed:
+            errors.append(f"worker close failed after {final_status}: {close_result.status}")
+        return {
             "closed": close_result.closed,
             "status": close_result.status,
             "exitCode": close_result.exit_code,
         }
-        if not close_result.closed:
-            errors.append(f"timed-out worker close failed: {close_result.status}")
+
+    # SKILL.md "Live Safety" invariant: close the workspace before recording a
+    # terminal status so a crash between the two cannot leak a live worker.
+    close_update = None
+    if final_status == "timedOut":
+        close_update = close_workspace()
 
     diff_status = capture_post_run_diff_status(config, run_dir=run_dir, runner=runner)
     if final_status in {"succeeded", "failed", "blocked"} and diff_status["dirty"]:
@@ -87,6 +97,9 @@ def poll_worker(
             final_status = "invalidatedByDiff"
             summary = "post-run git status failed during read-only worker verification"
         errors.append("post-run git status failed")
+
+    if final_status in CLOSE_ON_POLL_STATUSES and close_update is None:
+        close_update = close_workspace()
 
     update = {
         "workerId": worker_ref["workerId"],

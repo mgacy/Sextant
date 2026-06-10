@@ -164,7 +164,12 @@ class CmuxClaudeBackend:
         if completed.returncode != 0:
             message = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
             raise BackendError(f"cmux worker launch failed: {message}")
-        workspace_ref = session_ops.parse_workspace_ref(completed.stdout, command.workspace_ref)
+        workspace_ref = session_ops.parse_workspace_ref(completed.stdout)
+        if workspace_ref is None:
+            raise BackendError(
+                "cmux worker launch did not report a workspace ref; the workspace may "
+                f"need manual cleanup. stdout: {completed.stdout.strip()!r}"
+            )
         return {
             **launched,
             "workspaceRef": workspace_ref,

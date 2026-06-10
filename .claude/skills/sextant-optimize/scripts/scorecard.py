@@ -178,14 +178,14 @@ def validate_opportunities(payload: dict, *, events_by_id: dict[str, dict] | Non
 def high_confidence_opportunity_count(
     opportunities_payload: dict,
     *,
-    friction_events_payload: dict | None = None,
+    friction_events_payload: dict,
 ) -> int:
-    if friction_events_payload is not None:
-        events = validate_friction_events(friction_events_payload)
-        events_by_id = {event["id"]: event for event in events}
-    else:
-        validate_opportunities(opportunities_payload)
-        return 0
+    if friction_events_payload is None:
+        raise ScorecardError(
+            "friction_events_payload is required to count high-confidence opportunities"
+        )
+    events = validate_friction_events(friction_events_payload)
+    events_by_id = {event["id"]: event for event in events}
     return sum(
         1
         for opportunity in validate_opportunities(opportunities_payload, events_by_id=events_by_id)

@@ -224,6 +224,13 @@ class ScorecardValidationTests(unittest.TestCase):
         self.assertEqual(built["perturbed"]["regressions"], 0)
         self.assertEqual(built["aggregate"]["highConfidenceOpportunities"], 1)
 
+    def test_high_confidence_opportunity_count_requires_friction_events_payload(self):
+        with self.assertRaisesRegex(scorecard.ScorecardError, "friction_events_payload is required"):
+            scorecard.high_confidence_opportunity_count(
+                opportunities(opportunity()),
+                friction_events_payload=None,
+            )
+
     def test_high_confidence_opportunity_count_requires_verified_friction_evidence(self):
         with self.assertRaisesRegex(scorecard.ScorecardError, "unknown friction event"):
             scorecard.high_confidence_opportunity_count(

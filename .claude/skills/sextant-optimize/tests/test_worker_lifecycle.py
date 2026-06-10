@@ -16,6 +16,7 @@ sys.path.insert(0, str(SCRIPTS))
 import backend
 import bootstrap
 import poll
+import session_ops
 import state_ops
 import worker_ops
 
@@ -249,7 +250,7 @@ class WorkerLifecycleTests(unittest.TestCase):
 
             self.assertEqual(result["worker"]["status"], "invalidSignal")
             self.assertIn("status must be succeeded", result["worker"]["summary"])
-            worker_backend.close_worker(launched)
+            self.assertTrue(result["worker"]["closeResult"]["closed"])
 
     def test_timeout_is_recorded_and_worker_can_be_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -319,7 +320,7 @@ class WorkerLifecycleTests(unittest.TestCase):
             )
 
             self.assertEqual(result["worker"]["status"], "invalidatedByDiff")
-            worker_backend.close_worker(launched)
+            self.assertTrue(result["worker"]["closeResult"]["closed"])
 
     def test_post_run_diff_compares_baseline_ignores_run_artifacts_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -453,6 +454,65 @@ class WorkerLifecycleTests(unittest.TestCase):
             transcript_ref = json.loads(Path(launched["transcriptRefPath"]).read_text(encoding="utf-8"))
             self.assertEqual(transcript_ref["workspaceRef"], launched["workspaceRef"])
             self.assertEqual(transcript_ref["sessionId"], "unknown-until-discovered")
+
+    def test_parse_workspace_ref_returns_none_when_no_ref_is_found(self):
+        self.assertIsNone(session_ops.parse_workspace_ref(""))
+        self.assertIsNone(session_ops.parse_workspace_ref("created something\n"))
+        self.assertIsNone(session_ops.parse_workspace_ref('{"unrelated": 1}'))
+        self.assertEqual(session_ops.parse_workspace_ref("workspace:7\n"), "workspace:7")
+        self.assertEqual(
+            session_ops.parse_workspace_ref('{"workspaceRef": "workspace:9"}'),
+            "workspace:9",
+        )
+
+    def test_live_cmux_launch_rejects_unparseable_workspace_ref(self):
+        def garbled_runner(argv, **kwargs):
+            if argv[:2] == ["cmux", "new-workspace"]:
+                return completed(argv, stdout="launched, no ref printed\n")
+            return completed(argv, returncode=99, stderr="unexpected")
+
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp, backend_name="cmux")
+            worker_ref = worker_ops.prepare_worker(
+                run_dir=fixture.run_dir,
+                config=fixture.config,
+                role="tool-user",
+                iteration=1,
+                task={"id": "task-1", "prompt": "Use Sextant."},
+            )
+            worker_backend = backend.CmuxClaudeBackend(runner=garbled_runner)
+
+            with self.assertRaisesRegex(backend.BackendError, "did not report a workspace ref"):
+                worker_backend.create_worker(worker_ref)
+
+    def test_live_cmux_launch_failure_propagates_without_recording_launched_state(self):
+        def failing_runner(argv, **kwargs):
+            if argv[:2] == ["cmux", "new-workspace"]:
+                return completed(argv, returncode=1, stderr="cmux daemon unavailable")
+            return completed(argv, returncode=99, stderr="unexpected")
+
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp, backend_name="cmux")
+            worker_backend = backend.CmuxClaudeBackend(runner=failing_runner)
+
+            with self.assertRaisesRegex(backend.BackendError, "cmux daemon unavailable"):
+                worker_ops.launch_worker(
+                    run_dir=fixture.run_dir,
+                    config=fixture.config,
+                    role="tool-user",
+                    iteration=1,
+                    task={"id": "task-1", "prompt": "Use Sextant."},
+                    expected_revision=1,
+                    worker_backend=worker_backend,
+                    now="2026-04-27T00:01:00Z",
+                )
+
+            ref = json.loads(
+                (fixture.run_dir / "iteration-1" / "tool-user" / "worker-ref.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(ref["status"], "prepared")
+            statuses = [worker["status"] for worker in fixture.state()["workers"]]
+            self.assertEqual(statuses, ["prepared"])
 
     def test_live_cmux_backend_polls_reads_and_closes_workspace(self):
         calls = []
