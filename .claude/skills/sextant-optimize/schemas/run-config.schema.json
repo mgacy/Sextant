@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sextant.local/schemas/run-config.schema.json",
+  "title": "Sextant Optimize Run Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "tool", "target", "taskCorpusPath", "workers", "usage", "transcripts", "convergence", "scope"],
+  "properties": {
+    "runId": { "type": "string", "minLength": 1 },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "repoPath", "versionCommand", "smokeTestCommand"],
+      "properties": {
+        "name": { "const": "sextant" },
+        "repoPath": { "type": "string", "minLength": 1 },
+        "versionCommand": { "$ref": "#/$defs/argvCommand" },
+        "smokeTestCommand": { "$ref": "#/$defs/argvCommand" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codebasePath", "swiftPath", "transcriptProjectHint"],
+      "properties": {
+        "codebasePath": { "type": "string", "minLength": 1 },
+        "swiftPath": { "type": "string", "minLength": 1 },
+        "transcriptProjectHint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "taskCorpusPath": { "type": "string", "minLength": 1 },
+    "workers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "harness", "maxConcurrent", "sessionTimeoutSeconds"],
+      "properties": {
+        "backend": { "enum": ["cmux", "cmux_claude", "mock_subprocess"] },
+        "harness": { "enum": ["claude", "mock"] },
+        "maxConcurrent": { "type": "integer", "minimum": 1 },
+        "sessionTimeoutSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "fetchCommand", "required", "budgetPercent"],
+      "properties": {
+        "source": { "enum": ["claudeOAuthUsageApi", "none"] },
+        "fetchCommand": { "$ref": "#/$defs/argvCommand" },
+        "required": { "type": "boolean" },
+        "budgetPercent": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "transcripts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["extractCommand", "maxToolCalls", "maxMessages", "maxSliceTurns", "missingTranscriptPolicy"],
+      "properties": {
+        "extractCommand": { "$ref": "#/$defs/argvCommand" },
+        "maxToolCalls": { "type": "integer", "minimum": 1 },
+        "maxMessages": { "type": "integer", "minimum": 1 },
+        "maxSliceTurns": { "type": "integer", "minimum": 1 },
+        "missingTranscriptPolicy": { "enum": ["retryThenStop", "markUnevaluable"] }
+      }
+    },
+    "convergence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxIterations", "plateauThreshold", "frictionThreshold", "stopOnHighConfidenceHandoff"],
+      "properties": {
+        "maxIterations": { "type": "integer", "minimum": 1 },
+        "plateauThreshold": { "type": "integer", "minimum": 1 },
+        "frictionThreshold": { "type": "integer", "minimum": 0 },
+        "stopOnHighConfidenceHandoff": { "type": "boolean" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowImplementation", "allowDocsChanges", "allowedArtifactRoot"],
+      "properties": {
+        "allowImplementation": { "type": "boolean" },
+        "allowDocsChanges": { "type": "boolean" },
+        "allowedArtifactRoot": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "argvCommand": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

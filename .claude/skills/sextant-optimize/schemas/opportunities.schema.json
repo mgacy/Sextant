@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sextant.local/schemas/opportunities.schema.json",
+  "title": "Sextant Optimize Opportunities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["opportunities", "prioritized"],
+  "properties": {
+    "opportunities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "sourceFrictionIds", "suspectedFixLocus", "confidence", "expectedImpact", "recommendedNextStep"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "sourceFrictionIds": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+          "suspectedFixLocus": { "enum": ["sextant", "sextantDocs", "agentPrompt", "orchestrator", "harness", "targetCodebase", "none", "unknown"] },
+          "confidence": { "enum": ["low", "medium", "high"] },
+          "expectedImpact": { "type": "string", "minLength": 1 },
+          "recommendedNextStep": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "prioritized": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  }
+}

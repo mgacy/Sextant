@@ -1,0 +1,29 @@
+{
+  "iteration": 1,
+  "comparedTo": "baseline",
+  "tasks": [
+    {
+      "id": "delegate-tracing-home-details",
+      "answerQuality": "grounded",
+      "sextantQueries": 1,
+      "fallbackRgQueries": 0,
+      "fileReadsAfterTool": 1,
+      "failedAttempts": 0,
+      "adHocScripts": 0,
+      "manualJsonFiltering": 0,
+      "newFrictionEvents": 0,
+      "frictionScore": 1,
+      "previousFrictionScore": 7,
+      "delta": -6
+    }
+  ],
+  "aggregate": {
+    "frictionScore": 1,
+    "previousFrictionScore": 7,
+    "delta": -6,
+    "regressions": 0,
+    "newFriction": 0,
+    "evaluationInvalid": false,
+    "highConfidenceOpportunities": 1
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "tasks": [
+    {
+      "id": "delegate-tracing-home-details",
+      "title": "Trace child reducer delegate handling",
+      "prompt": "Find how the parent reducer handles delegate actions emitted by a child reducer.",
+      "baseline": {
+        "queryCount": 7,
+        "problem": "Progressively refined text search was needed to discover the structural relationship."
+      },
+      "expectedSignals": [
+        "parent reducer destination or child enum",
+        "associated value carrying child reducer type",
+        "file and line sufficient for one follow-up read"
+      ]
+    },
+    {
+      "id": "child-reducer-integration",
+      "title": "Find how child reducer state/action is wired",
+      "prompt": "Identify where a child feature's state and action are integrated into its parent feature.",
+      "baseline": {
+        "queryCount": 4,
+        "problem": "Text search mixed construction, typealias, and enum-case evidence."
+      },
+      "expectedSignals": [
+        "associated value or typealias reference",
+        "parentName showing nested enum context",
+        "clear limitation if function-body construction is required"
+      ]
+    }
+  ]
+}

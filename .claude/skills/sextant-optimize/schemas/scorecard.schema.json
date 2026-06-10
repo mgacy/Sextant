@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sextant.local/schemas/scorecard.schema.json",
+  "title": "Sextant Optimize Scorecard",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["iteration", "comparedTo", "tasks", "aggregate"],
+  "properties": {
+    "iteration": { "type": "integer", "minimum": 1 },
+    "comparedTo": { "type": "string", "minLength": 1 },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "answerQuality", "sextantQueries", "fallbackRgQueries", "fileReadsAfterTool", "failedAttempts", "adHocScripts", "manualJsonFiltering", "newFrictionEvents", "frictionScore", "previousFrictionScore", "delta"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "group": { "enum": ["controlled", "perturbed"] },
+          "answerQuality": { "enum": ["grounded", "partial", "unsupported", "invalid"] },
+          "sextantQueries": { "type": "integer", "minimum": 0 },
+          "fallbackRgQueries": { "type": "integer", "minimum": 0 },
+          "fileReadsAfterTool": { "type": "integer", "minimum": 0 },
+          "failedAttempts": { "type": "integer", "minimum": 0 },
+          "adHocScripts": { "type": "integer", "minimum": 0 },
+          "manualJsonFiltering": { "type": "integer", "minimum": 0 },
+          "newFrictionEvents": { "type": "integer", "minimum": 0 },
+          "frictionScore": { "type": "integer", "minimum": 0 },
+          "previousFrictionScore": { "type": "integer", "minimum": 0 },
+          "delta": { "type": "integer" }
+        }
+      }
+    },
+    "aggregate": {
+      "$ref": "#/$defs/aggregate"
+    },
+    "controlled": {
+      "$ref": "#/$defs/aggregate"
+    },
+    "perturbed": {
+      "$ref": "#/$defs/aggregate"
+    }
+  },
+  "$defs": {
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frictionScore", "previousFrictionScore", "delta", "regressions", "newFriction", "evaluationInvalid", "highConfidenceOpportunities"],
+      "properties": {
+        "frictionScore": { "type": "integer", "minimum": 0 },
+        "previousFrictionScore": { "type": "integer", "minimum": 0 },
+        "delta": { "type": "integer" },
+        "regressions": { "type": "integer", "minimum": 0 },
+        "newFriction": { "type": "integer", "minimum": 0 },
+        "evaluationInvalid": { "type": "boolean" },
+        "highConfidenceOpportunities": { "type": "integer", "minimum": 0 },
+        "humanJudgmentRequired": { "type": "boolean" }
+      }
+    }
+  }
+}

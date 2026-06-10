@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sextant.local/schemas/optimization-state.schema.json",
+  "title": "Sextant Optimize State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runId", "status", "currentIteration", "revision", "createdAt", "updatedAt", "toolState", "usage", "workers", "iterations", "decision", "errors"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["running", "handoffReady", "waitingForExternalChange", "readyForRerun", "completed", "failed"] },
+    "currentIteration": { "type": "integer", "minimum": 1 },
+    "revision": { "type": "integer", "minimum": 1 },
+    "createdAt": { "type": "string", "minLength": 1 },
+    "updatedAt": { "type": "string", "minLength": 1 },
+    "toolState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gitCommit", "version", "smokeTestPassed"],
+      "properties": {
+        "gitCommit": { "type": "string", "minLength": 1 },
+        "version": { "type": ["string", "null"] },
+        "smokeTestPassed": { "type": "boolean" }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initialSevenDay", "latestSevenDay", "runDelta", "budgetPercent", "fetchFailed"],
+      "properties": {
+        "initialSevenDay": { "type": ["number", "null"] },
+        "latestSevenDay": { "type": ["number", "null"] },
+        "runDelta": { "type": ["number", "null"] },
+        "budgetPercent": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "fetchFailed": { "type": "boolean" }
+      }
+    },
+    "workers": { "type": "array", "items": { "type": "object" } },
+    "iterations": { "type": "array", "items": { "type": "object" } },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reasons", "nextPhase"],
+      "properties": {
+        "decision": { "enum": ["continue", "stop"] },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "nextPhase": { "type": ["string", "null"] }
+      }
+    },
+    "errors": { "type": "array", "items": { "type": "object" } }
+  }
+}

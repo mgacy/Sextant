@@ -1,0 +1,45 @@
+{
+  "runId": "<UTC-run-id>",
+  "tool": {
+    "name": "sextant",
+    "repoPath": ".",
+    "versionCommand": ["swift", "run", "sextant", "--version"],
+    "smokeTestCommand": ["swift", "run", "sextant", "--help"]
+  },
+  "target": {
+    "codebasePath": "<absolute-path-to-target-swift-codebase>",
+    "swiftPath": "Packages/Features",
+    "transcriptProjectHint": "<target-project-name>"
+  },
+  "taskCorpusPath": "task-corpus.json",
+  "workers": {
+    "backend": "cmux",
+    "harness": "claude",
+    "maxConcurrent": 1,
+    "sessionTimeoutSeconds": 3600
+  },
+  "usage": {
+    "source": "claudeOAuthUsageApi",
+    "fetchCommand": ["python3", ".claude/skills/sextant-optimize/scripts/fetch_usage.py"],
+    "required": true,
+    "budgetPercent": 25
+  },
+  "transcripts": {
+    "extractCommand": ["python3", ".claude/skills/sextant-optimize/scripts/extract_transcript.py"],
+    "maxToolCalls": 200,
+    "maxMessages": 80,
+    "maxSliceTurns": 40,
+    "missingTranscriptPolicy": "retryThenStop"
+  },
+  "convergence": {
+    "maxIterations": 2,
+    "plateauThreshold": 2,
+    "frictionThreshold": 3,
+    "stopOnHighConfidenceHandoff": true
+  },
+  "scope": {
+    "allowImplementation": false,
+    "allowDocsChanges": false,
+    "allowedArtifactRoot": ".claude-tracking/tool-eval-runs"
+  }
+}
