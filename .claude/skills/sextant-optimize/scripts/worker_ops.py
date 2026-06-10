@@ -212,6 +212,8 @@ def validate_completion_signal(run_dir: str | Path, worker_ref: dict, payload: d
     artifacts = payload.get("artifacts")
     if not isinstance(artifacts, list) or not all(isinstance(item, str) and item for item in artifacts):
         raise WorkerError("worker completion artifacts must be an array of non-empty strings")
+    if "transcriptRef" not in payload:
+        raise WorkerError("worker completion transcriptRef is required (use null when absent)")
     transcript_ref = payload.get("transcriptRef")
     if transcript_ref is not None and not isinstance(transcript_ref, str):
         raise WorkerError("worker completion transcriptRef must be a string or null")

@@ -28,7 +28,7 @@ CMUX_BACKENDS = frozenset(("cmux", "cmux_claude"))
 # so the embedded mock worker can serialize it without a circular import;
 # worker_ops re-exports it for signal validation.
 ROLE_REQUIRED_ARTIFACTS = {
-    "tool-user": ["report.md", "transcript-ref.json", "transcript-summary.json"],
+    "tool-user": ["report.md", "transcript-ref.json"],
     "friction-miner": ["friction-events.json", "report.md"],
     "evaluator": ["evaluation.md", "scorecard.json"],
     "opportunity-generator": ["candidates.md", "prioritized.json"],

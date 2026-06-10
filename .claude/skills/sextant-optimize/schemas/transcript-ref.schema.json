@@ -9,7 +9,7 @@
     "role": { "type": "string", "minLength": 1 },
     "workerId": { "type": "string", "minLength": 1 },
     "backend": { "type": "string", "minLength": 1 },
-    "workspaceRef": { "type": "string", "minLength": 1 },
+    "workspaceRef": { "type": ["string", "null"] },
     "claudeProject": { "type": "string", "minLength": 1 },
     "sessionId": { "type": "string", "minLength": 1 },
     "startedAt": { "type": "string", "minLength": 1 },

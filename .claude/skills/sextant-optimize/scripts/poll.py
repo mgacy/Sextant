@@ -67,6 +67,14 @@ def poll_worker(
     elif final_status is None and backend_status.status in {"failed", "unknown"}:
         final_status = backend_status.status
         summary = backend_status.summary
+    elif final_status is None and backend_status.status == "exited":
+        # The worker process finished without writing a completion signal.
+        # Treat it as a missing signal so the worker reaches a terminal status
+        # (and the backend workspace is released) rather than persisting the
+        # non-terminal, unrecognized "exited" status, which never auto-closes.
+        final_status = "invalidSignal"
+        summary = "worker process exited without writing a completion signal"
+        errors.append(summary)
     elif final_status is None:
         final_status = backend_status.status
         summary = backend_status.summary

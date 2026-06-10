@@ -250,7 +250,6 @@ class WorkerLifecycleTests(unittest.TestCase):
             self.assertEqual(result["worker"]["artifacts"], [
                 "iteration-1/tool-user/report.md",
                 "iteration-1/tool-user/transcript-ref.json",
-                "iteration-1/tool-user/transcript-summary.json",
             ])
 
             closed = poll.close_worker(
@@ -294,6 +293,43 @@ class WorkerLifecycleTests(unittest.TestCase):
 
             self.assertEqual(result["worker"]["status"], "invalidSignal")
             self.assertIn("status must be succeeded", result["worker"]["summary"])
+            self.assertTrue(result["worker"]["closeResult"]["closed"])
+
+    def test_clean_exit_without_signal_is_invalid_and_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp)
+            worker_backend = backend.MockSubprocessBackend(command=[sys.executable, "-c", "raise SystemExit(0)"])
+            launched = worker_ops.launch_worker(
+                run_dir=fixture.run_dir,
+                config=fixture.config,
+                role="tool-user",
+                iteration=1,
+                task={"id": "task-1", "prompt": "Use Sextant."},
+                expected_revision=1,
+                worker_backend=worker_backend,
+                now="2026-04-27T00:01:00Z",
+            )
+
+            deadline = time.time() + 5
+            result = None
+            revision = fixture.state()["revision"]
+            while time.time() < deadline:
+                result = poll.poll_worker(
+                    run_dir=fixture.run_dir,
+                    config=fixture.config,
+                    worker_ref=launched,
+                    expected_revision=revision,
+                    worker_backend=worker_backend,
+                    now="2026-04-27T00:01:01Z",
+                    runner=clean_git_runner,
+                )
+                revision = result["state"]["revision"]
+                if result["worker"]["status"] != "running":
+                    break
+                time.sleep(0.05)
+
+            self.assertEqual(result["worker"]["status"], "invalidSignal")
+            self.assertIn("exited without writing a completion signal", result["worker"]["summary"])
             self.assertTrue(result["worker"]["closeResult"]["closed"])
 
     def test_timeout_is_recorded_and_worker_can_be_closed(self):

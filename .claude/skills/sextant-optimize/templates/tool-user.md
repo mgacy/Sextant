@@ -27,6 +27,7 @@ Write these artifacts under `iteration-{{ITERATION}}/tool-user/`:
 
 - `report.md`: concise answer, commands used, fallback reason if any, and answer confidence.
 - `transcript-ref.json`: transcript reference skeleton if the coordinator has not already written it.
-- `transcript-summary.json`: transcript summary only when supplied by extraction scripts.
+
+Do not write `transcript-summary.json`. The coordinator generates it from your session transcript after you complete; producing it yourself would violate the read-only transcript boundary above.
 
 Signal completion only through the coordinator-provided completion mechanism.
