@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Fetch a Claude usage snapshot for sextant-optimize."""
+"""Fetch a Claude usage snapshot for sextant-optimize.
+
+Three input paths, in priority order: an explicit `--usage-file` JSON payload,
+the `SEXTANT_OPTIMIZE_USAGE_SEVEN_DAY` environment override, and the live
+Claude OAuth usage API (token read from the macOS keychain, cached briefly on
+disk with owner-only permissions). Every path fails closed: any error exits 2
+with a JSON error object on stderr so callers never mistake a failed fetch for
+a real snapshot.
+"""
 
 from __future__ import annotations
 
@@ -30,8 +38,10 @@ def parse_usage_payload(payload: dict) -> dict:
 def _read_cached_token(now: float | None = None) -> str | None:
     now = now or time.time()
     try:
-        age = now - TOKEN_CACHE.stat().st_mtime
-        if age > TOKEN_TTL_SECONDS:
+        info = TOKEN_CACHE.stat()
+        if stat.S_IMODE(info.st_mode) & 0o077:
+            return None
+        if now - info.st_mtime > TOKEN_TTL_SECONDS:
             return None
         return TOKEN_CACHE.read_text(encoding="utf-8").strip() or None
     except OSError:
@@ -39,8 +49,17 @@ def _read_cached_token(now: float | None = None) -> str | None:
 
 
 def _write_cached_token(token: str) -> None:
-    TOKEN_CACHE.write_text(token, encoding="utf-8")
-    TOKEN_CACHE.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    TOKEN_CACHE.unlink(missing_ok=True)
+    fd = os.open(TOKEN_CACHE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(token)
+
+
+def _invalidate_cached_token() -> None:
+    try:
+        TOKEN_CACHE.unlink()
+    except OSError:
+        pass
 
 
 def _oauth_token_from_keychain(*, runner=subprocess.run) -> str:
@@ -97,9 +116,17 @@ def fetch_oauth_usage(*, runner=subprocess.run) -> dict:
     finally:
         os.unlink(header_path)
     if completed.returncode != 0:
-        raise ValueError("usage API request failed")
-    payload = json.loads(completed.stdout)
-    return parse_usage_payload(payload)
+        detail = completed.stderr.strip() or "no stderr"
+        raise ValueError(f"usage API request failed: curl exit {completed.returncode}: {detail}")
+    try:
+        payload = json.loads(completed.stdout)
+        return parse_usage_payload(payload)
+    except ValueError as error:
+        # A non-JSON or malformed payload usually means an expired or revoked
+        # token (the API returns an error body), so drop the cached token to
+        # force a fresh keychain read on the next attempt.
+        _invalidate_cached_token()
+        raise ValueError(f"usage API returned an invalid usage payload: {error}") from error
 
 
 def main(argv: list[str] | None = None) -> int:

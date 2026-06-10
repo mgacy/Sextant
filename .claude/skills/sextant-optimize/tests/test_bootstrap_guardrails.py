@@ -4,6 +4,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 
@@ -142,6 +144,61 @@ class BootstrapGuardrailTests(unittest.TestCase):
                 )
             self.assertIn("CMUX_WORKSPACE_ID", context.exception.missing)
 
+    def test_prerequisite_command_failure_names_command_and_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = base_config(root, root)
+
+            def failing_runner(argv, **kwargs):
+                if argv == ["swift", "--version"]:
+                    return completed(argv, returncode=1, stderr="swift broken")
+                if argv == ["cc-session-tool", "--help"]:
+                    raise subprocess.TimeoutExpired(argv, 120)
+                return completed(argv)
+
+            with self.assertRaises(bootstrap.PrerequisiteError) as context:
+                bootstrap.check_prerequisites(
+                    config,
+                    which=lambda name: f"/bin/{name}",
+                    runner=failing_runner,
+                    env={"CMUX_WORKSPACE_ID": "workspace:1"},
+                )
+
+            missing = context.exception.missing
+            self.assertIn("swift --version (exit 1)", missing)
+            self.assertTrue(
+                any("cc-session-tool --help" in entry and "TimeoutExpired" in entry for entry in missing)
+            )
+
+    def test_prerequisites_treat_cmux_claude_backend_like_cmux(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = base_config(root, root)
+            config["workers"]["backend"] = "cmux_claude"
+
+            with self.assertRaises(bootstrap.PrerequisiteError) as context:
+                bootstrap.check_prerequisites(
+                    config,
+                    which=lambda name: None if name == "cmux" else f"/bin/{name}",
+                    runner=lambda argv, **kwargs: completed(argv),
+                    env={"CMUX_WORKSPACE_ID": "workspace:1"},
+                )
+            self.assertEqual(context.exception.missing, ["cmux"])
+
+            calls = []
+
+            def fake_runner(argv, **kwargs):
+                calls.append(argv)
+                return completed(argv)
+
+            bootstrap.check_prerequisites(
+                config,
+                which=lambda name: f"/bin/{name}",
+                runner=fake_runner,
+                env={"CMUX_WORKSPACE_ID": "workspace:1"},
+            )
+            self.assertIn(["cmux", "version"], calls)
+
     def test_run_directory_created_under_allowed_artifact_root(self):
         with tempfile.TemporaryDirectory() as temp:
             repo_root = Path(temp)
@@ -194,11 +251,30 @@ class BootstrapGuardrailTests(unittest.TestCase):
             def failing_runner(argv, **kwargs):
                 return completed(argv, returncode=2, stderr="usage unavailable")
 
-            usage = bootstrap.fetch_usage_snapshot(config, repo_root=root, runner=failing_runner)
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                usage = bootstrap.fetch_usage_snapshot(config, repo_root=root, runner=failing_runner)
 
             self.assertTrue(usage["fetchFailed"])
             self.assertIsNone(usage["initialSevenDay"])
             self.assertEqual(usage["budgetPercent"], 25)
+            self.assertIn("optional usage fetch failed", stderr.getvalue())
+
+    def test_usage_fetch_optional_invalid_payload_warns_and_degrades(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config = base_config(root, root)
+            config["usage"]["required"] = False
+
+            def invalid_payload_runner(argv, **kwargs):
+                return completed(argv, stdout="not json")
+
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                usage = bootstrap.fetch_usage_snapshot(config, repo_root=root, runner=invalid_payload_runner)
+
+            self.assertTrue(usage["fetchFailed"])
+            self.assertIn("invalid payload", stderr.getvalue())
 
     def test_usage_fetch_success_normalizes_initial_and_latest_values(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -257,6 +333,103 @@ class BootstrapGuardrailTests(unittest.TestCase):
             self.assertEqual(usage, {"sevenDay": 37.0})
             self.assertEqual(calls[0][0], "security")
             self.assertEqual(calls[1][0], "curl")
+
+    def test_token_cache_respects_ttl_permissions_and_corruption(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original_cache = fetch_usage.TOKEN_CACHE
+            fetch_usage.TOKEN_CACHE = Path(temp) / "token-cache"
+            try:
+                fetch_usage._write_cached_token("token-abc")
+                self.assertEqual(stat.S_IMODE(os.stat(fetch_usage.TOKEN_CACHE).st_mode), 0o600)
+                mtime = os.stat(fetch_usage.TOKEN_CACHE).st_mtime
+
+                self.assertEqual(fetch_usage._read_cached_token(now=mtime + 1), "token-abc")
+                self.assertIsNone(
+                    fetch_usage._read_cached_token(now=mtime + fetch_usage.TOKEN_TTL_SECONDS + 1)
+                )
+
+                os.chmod(fetch_usage.TOKEN_CACHE, 0o644)
+                self.assertIsNone(fetch_usage._read_cached_token(now=mtime + 1))
+                os.chmod(fetch_usage.TOKEN_CACHE, 0o600)
+
+                fetch_usage.TOKEN_CACHE.write_text("", encoding="utf-8")
+                self.assertIsNone(fetch_usage._read_cached_token())
+            finally:
+                fetch_usage.TOKEN_CACHE = original_cache
+
+    def test_fetch_usage_oauth_failure_modes_raise_detailed_errors(self):
+        keychain_ok = '{"claudeAiOauth":{"accessToken":"token-123"}}'
+
+        def runner_for(keychain=None, curl=None):
+            def run(argv, **kwargs):
+                if argv[:3] == ["security", "find-generic-password", "-s"]:
+                    if keychain is not None:
+                        return keychain(argv)
+                    return completed(argv, stdout=keychain_ok)
+                if argv and argv[0] == "curl":
+                    if curl is None:
+                        raise AssertionError("curl should not run for this case")
+                    return curl(argv)
+                return completed(argv, returncode=99, stderr="unexpected")
+
+            return run
+
+        cases = [
+            (
+                "keychain read fails",
+                runner_for(keychain=lambda argv: completed(argv, returncode=1, stderr="locked")),
+                "could not read Claude Code credentials",
+                False,
+            ),
+            (
+                "keychain payload is not JSON",
+                runner_for(keychain=lambda argv: completed(argv, stdout="not json")),
+                "credentials are not JSON",
+                False,
+            ),
+            (
+                "keychain payload is missing the token",
+                runner_for(keychain=lambda argv: completed(argv, stdout='{"claudeAiOauth":{}}')),
+                "could not extract OAuth token",
+                False,
+            ),
+            (
+                "keychain token is empty",
+                runner_for(keychain=lambda argv: completed(argv, stdout='{"claudeAiOauth":{"accessToken":""}}')),
+                "could not extract OAuth token",
+                False,
+            ),
+            (
+                "curl exits nonzero",
+                runner_for(curl=lambda argv: completed(argv, returncode=7, stderr="connection refused")),
+                "curl exit 7: connection refused",
+                True,
+            ),
+            (
+                "usage response is not JSON",
+                runner_for(curl=lambda argv: completed(argv, stdout="<html>unauthorized</html>")),
+                "invalid usage payload",
+                False,
+            ),
+            (
+                "usage response is missing sevenDay",
+                runner_for(curl=lambda argv: completed(argv, stdout='{"unexpected": true}')),
+                "invalid usage payload",
+                False,
+            ),
+        ]
+
+        for label, runner, expected, cache_kept in cases:
+            with self.subTest(label):
+                with tempfile.TemporaryDirectory() as temp:
+                    original_cache = fetch_usage.TOKEN_CACHE
+                    fetch_usage.TOKEN_CACHE = Path(temp) / "token-cache"
+                    try:
+                        with self.assertRaisesRegex(ValueError, expected):
+                            fetch_usage.fetch_oauth_usage(runner=runner)
+                        self.assertEqual(fetch_usage.TOKEN_CACHE.exists(), cache_kept)
+                    finally:
+                        fetch_usage.TOKEN_CACHE = original_cache
 
 
 class PathSafetyTests(unittest.TestCase):

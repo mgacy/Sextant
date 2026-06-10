@@ -116,6 +116,50 @@ def clean_git_runner(argv, **kwargs):
     return completed(argv, returncode=99, stderr="unexpected")
 
 
+class FailingCloseBackend:
+    """Delegates to a real backend but always fails to close the workspace."""
+
+    name = "mock_subprocess"
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def create_worker(self, worker_ref):
+        return self.inner.create_worker(worker_ref)
+
+    def poll_worker(self, worker_ref):
+        return self.inner.poll_worker(worker_ref)
+
+    def read_worker_screen(self, worker_ref, max_lines):
+        return self.inner.read_worker_screen(worker_ref, max_lines)
+
+    def close_worker(self, worker_ref):
+        return backend.CloseResult(closed=False, status="closeFailed", exit_code=None)
+
+
+class TranscriptDeletingBackend:
+    """Simulates post-create bookkeeping failure by removing the transcript ref."""
+
+    name = "cmux_claude"
+
+    def __init__(self):
+        self.closed = []
+
+    def create_worker(self, worker_ref):
+        Path(worker_ref["transcriptRefPath"]).unlink()
+        return {**worker_ref, "workspaceRef": "workspace:9"}
+
+    def poll_worker(self, worker_ref):
+        raise AssertionError("poll_worker should not be called")
+
+    def read_worker_screen(self, worker_ref, max_lines):
+        raise AssertionError("read_worker_screen should not be called")
+
+    def close_worker(self, worker_ref):
+        self.closed.append(worker_ref.get("workspaceRef"))
+        return backend.CloseResult(closed=True, status="closed", exit_code=None)
+
+
 class WorkerLifecycleTests(unittest.TestCase):
     def test_worker_ref_is_persisted_before_mock_launch_and_prompt_is_rendered(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -321,6 +365,170 @@ class WorkerLifecycleTests(unittest.TestCase):
 
             self.assertEqual(result["worker"]["status"], "invalidatedByDiff")
             self.assertTrue(result["worker"]["closeResult"]["closed"])
+
+    def test_git_status_failure_invalidates_successful_worker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp)
+            worker_backend = backend.MockSubprocessBackend()
+            launched = worker_ops.launch_worker(
+                run_dir=fixture.run_dir,
+                config=fixture.config,
+                role="tool-user",
+                iteration=1,
+                task={"id": "task-1", "prompt": "Use Sextant."},
+                expected_revision=1,
+                worker_backend=worker_backend,
+                now="2026-04-27T00:01:00Z",
+            )
+            deadline = time.time() + 5
+            while time.time() < deadline and not Path(launched["signalPath"]).exists():
+                time.sleep(0.05)
+
+            def failing_git_runner(argv, **kwargs):
+                if argv[:3] == ["git", "status", "--porcelain"]:
+                    return completed(argv, returncode=128, stderr="not a git repo")
+                return completed(argv, returncode=99)
+
+            result = poll.poll_worker(
+                run_dir=fixture.run_dir,
+                config=fixture.config,
+                worker_ref=launched,
+                expected_revision=fixture.state()["revision"],
+                worker_backend=worker_backend,
+                now="2026-04-27T00:01:02Z",
+                runner=failing_git_runner,
+            )
+
+            self.assertEqual(result["worker"]["status"], "invalidatedByDiff")
+            self.assertTrue(result["worker"]["diffStatus"]["failed"])
+            self.assertIn("post-run git status failed", result["worker"]["errors"])
+            self.assertTrue(result["worker"]["closeResult"]["closed"])
+
+    def test_timeout_close_failure_is_recorded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp, timeout=1)
+            inner = backend.MockSubprocessBackend(command=[sys.executable, "-c", "import time; time.sleep(5)"])
+            launched = worker_ops.launch_worker(
+                run_dir=fixture.run_dir,
+                config=fixture.config,
+                role="tool-user",
+                iteration=1,
+                task={"id": "task-1", "prompt": "Use Sextant."},
+                expected_revision=1,
+                worker_backend=inner,
+                now="2026-04-27T00:01:00Z",
+            )
+
+            result = poll.poll_worker(
+                run_dir=fixture.run_dir,
+                config=fixture.config,
+                worker_ref=launched,
+                expected_revision=fixture.state()["revision"],
+                worker_backend=FailingCloseBackend(inner),
+                now="2026-04-27T00:01:02Z",
+                runner=clean_git_runner,
+            )
+
+            self.assertEqual(result["worker"]["status"], "timedOut")
+            self.assertFalse(result["worker"]["closeResult"]["closed"])
+            self.assertEqual(result["worker"]["closeResult"]["status"], "closeFailed")
+            self.assertTrue(any("close failed" in error for error in result["worker"]["errors"]))
+            inner.close_worker(launched)
+
+    def test_corrupt_baseline_status_is_surfaced_not_silently_ignored(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp)
+            (fixture.run_dir / "git-status.json").write_text("not json", encoding="utf-8")
+
+            diff = poll.capture_post_run_diff_status(
+                fixture.config,
+                run_dir=fixture.run_dir,
+                runner=clean_git_runner,
+            )
+
+            self.assertIn("unreadable", diff["baselineLoadError"])
+
+    def test_launch_bookkeeping_failure_closes_workspace_and_records_launch_failed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp, backend_name="cmux")
+            worker_backend = TranscriptDeletingBackend()
+
+            with self.assertRaises(FileNotFoundError):
+                worker_ops.launch_worker(
+                    run_dir=fixture.run_dir,
+                    config=fixture.config,
+                    role="tool-user",
+                    iteration=1,
+                    task={"id": "task-1", "prompt": "Use Sextant."},
+                    expected_revision=1,
+                    worker_backend=worker_backend,
+                    now="2026-04-27T00:01:00Z",
+                )
+
+            self.assertEqual(worker_backend.closed, ["workspace:9"])
+            statuses = [worker["status"] for worker in fixture.state()["workers"]]
+            self.assertEqual(statuses, ["prepared", "launchFailed"])
+            ref = json.loads(
+                (fixture.run_dir / "iteration-1" / "tool-user" / "worker-ref.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(ref["status"], "launchFailed")
+            self.assertFalse(ref.get("closed") is False)
+
+    def test_completion_signal_rejects_missing_artifact_file(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp)
+            worker_ref = worker_ops.prepare_worker(
+                run_dir=fixture.run_dir,
+                config=fixture.config,
+                role="tool-user",
+                iteration=1,
+                task={"id": "task-1", "prompt": "Use Sextant."},
+            )
+            Path(worker_ref["signalPath"]).write_text(
+                json.dumps({
+                    "role": "tool-user",
+                    "status": "succeeded",
+                    "transcriptRef": None,
+                    "artifacts": ["iteration-1/tool-user/report.md"],
+                    "summary": "claims an artifact that was never written",
+                }),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(worker_ops.WorkerError, "does not exist"):
+                worker_ops.read_completion_signal(fixture.run_dir, worker_ref)
+
+    def test_completion_signal_requires_transcript_ref_listed_in_artifacts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp)
+            worker_ref = worker_ops.prepare_worker(
+                run_dir=fixture.run_dir,
+                config=fixture.config,
+                role="tool-user",
+                iteration=1,
+                task={"id": "task-1", "prompt": "Use Sextant."},
+            )
+            output_dir = Path(worker_ref["outputDir"])
+            (output_dir / "report.md").write_text("# Report\n", encoding="utf-8")
+            (output_dir / "transcript-summary.json").write_text("{}", encoding="utf-8")
+            (output_dir / "extra.json").write_text("{}", encoding="utf-8")
+            Path(worker_ref["signalPath"]).write_text(
+                json.dumps({
+                    "role": "tool-user",
+                    "status": "succeeded",
+                    "transcriptRef": "iteration-1/tool-user/extra.json",
+                    "artifacts": [
+                        "iteration-1/tool-user/report.md",
+                        "iteration-1/tool-user/transcript-ref.json",
+                        "iteration-1/tool-user/transcript-summary.json",
+                    ],
+                    "summary": "transcript ref is not listed in artifacts",
+                }),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(worker_ops.WorkerError, "must also be listed in artifacts"):
+                worker_ops.read_completion_signal(fixture.run_dir, worker_ref)
 
     def test_post_run_diff_compares_baseline_ignores_run_artifacts_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -97,6 +97,8 @@ def poll_worker(
             final_status = "invalidatedByDiff"
             summary = "post-run git status failed during read-only worker verification"
         errors.append("post-run git status failed")
+    if diff_status.get("baselineLoadError"):
+        errors.append(diff_status["baselineLoadError"])
 
     if final_status in CLOSE_ON_POLL_STATUSES and close_update is None:
         close_update = close_workspace()
@@ -163,7 +165,9 @@ def capture_post_run_diff_status(
         "target": canonical_path(config["target"]["codebasePath"]),
     }
     result = {"dirty": False, "failed": False, "repos": {}}
-    baseline = _load_baseline_status(run_dir)
+    baseline, baseline_error = _load_baseline_status(run_dir)
+    if baseline_error:
+        result["baselineLoadError"] = baseline_error
     for name, repo_path in repos.items():
         status = runner(
             ["git", "status", "--porcelain"],
@@ -197,15 +201,22 @@ def capture_post_run_diff_status(
     return result
 
 
-def _load_baseline_status(run_dir: str | Path) -> dict:
+def _load_baseline_status(run_dir: str | Path) -> tuple[dict, str | None]:
+    """Load the bootstrap git-status baseline.
+
+    Returns the baseline plus an error message when the file exists but cannot
+    be used; a missing file is a legitimate no-baseline case.
+    """
     path = Path(run_dir) / "git-status.json"
     if not path.exists():
-        return {}
+        return {}, None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
+    except (OSError, json.JSONDecodeError) as error:
+        return {}, f"baseline git-status.json is unreadable: {error}"
+    if not isinstance(payload, dict):
+        return {}, "baseline git-status.json must be a JSON object"
+    return payload, None
 
 
 def _status_path(line: str) -> str:

@@ -90,7 +90,7 @@ Use only after the full test suite and mock dry-run test pass. Keep the first li
 python3 .claude/skills/sextant-optimize/scripts/bootstrap.py --config .claude-tracking/tool-eval-runs/<run-id>/run-config.json --repo-root .
 ```
 
-For live `cmux` runs, start from a cmux terminal so `CMUX_WORKSPACE_ID` is present. Required usage tracking reads Claude Code OAuth credentials from Keychain and fails closed if usage cannot be fetched; tests and controlled local runs may use `SEXTANT_OPTIMIZE_USAGE_SEVEN_DAY` or `fetch_usage.py --usage-file`.
+For live `cmux` runs, start from a cmux terminal so `CMUX_WORKSPACE_ID` is present. Usage tracking reads Claude Code OAuth credentials from Keychain; it fails closed only when `usage.required` is `true` in the run config — when `usage.required` is `false`, a failed fetch is recorded as `fetchFailed: true` with a stderr warning and the run continues. Tests and controlled local runs may use `SEXTANT_OPTIMIZE_USAGE_SEVEN_DAY` or `fetch_usage.py --usage-file`.
 
 Then use the script entrypoints directly:
 

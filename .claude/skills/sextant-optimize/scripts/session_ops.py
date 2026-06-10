@@ -29,10 +29,12 @@ def build_cmux_claude_command(
     prompt_path: str | Path,
     output_dir: str | Path,
 ) -> CmuxClaudeCommand:
-    """Build the argv-only command used to launch a Claude worker in cmux.
+    """Build the `cmux new-workspace --command ...` argv for a Claude worker.
 
-    The command is intentionally constructed without a shell and returned for
-    dry-run tests. The worker lifecycle code decides whether to execute it.
+    Returns the cmux argv alongside the claude argv it wraps and a synthetic
+    `cmux:<worker_id>` workspace ref used only by dry runs. The command is
+    constructed without a shell; dry-run callers just inspect the argv, while
+    live callers execute it and parse the real workspace ref from stdout.
     """
 
     workspace_ref = f"cmux:{worker_id}"

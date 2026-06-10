@@ -160,15 +160,37 @@ def launch_worker(
     )
     launched = worker_backend.create_worker(worker_ref)
     launched["status"] = "launched"
-    write_json(Path(worker_ref["workerRefPath"]), launched)
-    if launched.get("workspaceRef"):
-        update_transcript_workspace(Path(worker_ref["transcriptRefPath"]), launched["workspaceRef"])
-    state_ops.record_worker_update(
-        run_dir,
-        expected_revision=prepared_state["revision"],
-        worker={**serializable_worker_ref(launched), "status": "launched"},
-        now=now,
-    )
+    try:
+        write_json(Path(worker_ref["workerRefPath"]), launched)
+        if launched.get("workspaceRef"):
+            update_transcript_workspace(Path(worker_ref["transcriptRefPath"]), launched["workspaceRef"])
+        state_ops.record_worker_update(
+            run_dir,
+            expected_revision=prepared_state["revision"],
+            worker={**serializable_worker_ref(launched), "status": "launched"},
+            now=now,
+        )
+    except Exception:
+        # Bookkeeping failed after a real workspace was created: close it so
+        # the run cannot leak a live worker that no record points at.
+        close_result = worker_backend.close_worker(launched)
+        failure = {
+            **serializable_worker_ref(launched),
+            "status": "launchFailed",
+            "closed": close_result.closed,
+            "closeStatus": close_result.status,
+        }
+        try:
+            write_json(Path(worker_ref["workerRefPath"]), failure)
+            state_ops.record_worker_update(
+                run_dir,
+                expected_revision=prepared_state["revision"],
+                worker=failure,
+                now=now,
+            )
+        except Exception as record_error:  # best-effort; the original error wins
+            print(f"warning: could not record launchFailed state: {record_error}", file=sys.stderr)
+        raise
     return launched
 
 

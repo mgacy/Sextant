@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+import state_ops
+from backend import CMUX_BACKENDS
 from path_safety import PathSafetyError, canonical_path, ensure_contained
 
 
@@ -89,7 +91,7 @@ def check_prerequisites(
 ) -> None:
     required = ["python3", "swift", "cc-session-tool"]
     workers = config.get("workers", {})
-    if require_live_backend and workers.get("backend") == "cmux":
+    if require_live_backend and workers.get("backend") in CMUX_BACKENDS:
         required.append("cmux")
     if require_live_backend and workers.get("harness") == "claude":
         required.append("claude")
@@ -99,8 +101,7 @@ def check_prerequisites(
         raise PrerequisiteError(missing)
 
     env = os.environ if env is None else env
-    workers = config.get("workers", {})
-    if require_live_backend and workers.get("backend") in {"cmux", "cmux_claude"}:
+    if require_live_backend and workers.get("backend") in CMUX_BACKENDS:
         if not env.get("CMUX_WORKSPACE_ID"):
             raise PrerequisiteError(["CMUX_WORKSPACE_ID"])
 
@@ -109,13 +110,14 @@ def check_prerequisites(
         ["swift", "--version"],
         ["cc-session-tool", "--help"],
     ]
-    if require_live_backend and workers.get("backend") in {"cmux", "cmux_claude"}:
+    if require_live_backend and workers.get("backend") in CMUX_BACKENDS:
         checks.append(["cmux", "version"])
     if require_live_backend and workers.get("harness") == "claude":
         checks.append(["claude", "--version"])
 
     failed = []
     for argv in checks:
+        joined = " ".join(argv)
         try:
             result = runner(
                 argv,
@@ -125,11 +127,11 @@ def check_prerequisites(
                 timeout=120,
                 check=False,
             )
-        except Exception:
-            failed.append(" ".join(argv))
+        except (OSError, subprocess.SubprocessError) as error:
+            failed.append(f"{joined} ({error!r})")
             continue
         if result.returncode != 0:
-            failed.append(" ".join(argv))
+            failed.append(f"{joined} (exit {result.returncode})")
     if failed:
         raise PrerequisiteError(failed)
 
@@ -208,8 +210,13 @@ def fetch_usage_snapshot(
     usage_config = config["usage"]
     result = run_command(usage_config["fetchCommand"], cwd=repo_root, runner=runner)
     if result.returncode != 0:
+        detail = result.stderr.strip() or "unknown error"
         if usage_config.get("required", False):
-            raise BootstrapError("required usage fetch failed: " + (result.stderr.strip() or "unknown error"))
+            raise BootstrapError(f"required usage fetch failed: {detail}")
+        print(
+            f"warning: optional usage fetch failed; continuing without usage data: {detail}",
+            file=sys.stderr,
+        )
         return {
             "initialSevenDay": None,
             "latestSevenDay": None,
@@ -224,9 +231,13 @@ def fetch_usage_snapshot(
         if usage.get("fetchFailed") is True:
             raise ValueError("usage fetch reported fetchFailed=true")
         seven_day = usage["sevenDay"]
-    except Exception as error:
+    except (json.JSONDecodeError, ValueError, KeyError, TypeError, AttributeError) as error:
         if usage_config.get("required", False):
-            raise BootstrapError(f"required usage fetch returned invalid JSON: {error}") from error
+            raise BootstrapError(f"required usage fetch returned an invalid payload: {error!r}") from error
+        print(
+            f"warning: optional usage fetch returned an invalid payload; continuing without usage data: {error!r}",
+            file=sys.stderr,
+        )
         return {
             "initialSevenDay": None,
             "latestSevenDay": None,
@@ -274,8 +285,6 @@ def bootstrap(config_path: Path, *, repo_root: Path, skip_prerequisites: bool = 
 
     (run_dir / "run-config.json").write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
     (run_dir / "git-status.json").write_text(json.dumps(git_status, indent=2, sort_keys=True) + "\n")
-    import state_ops
-
     state_ops.initialize_state(run_dir, initial_state(config, tool_state, usage, now=now))
     return run_dir
 

@@ -19,6 +19,11 @@ class BackendError(RuntimeError):
     pass
 
 
+# Config may name the cmux backend either way; worker_ops normalizes "cmux"
+# to "cmux_claude" when writing worker refs.
+CMUX_BACKENDS = frozenset(("cmux", "cmux_claude"))
+
+
 @dataclass(frozen=True)
 class WorkerStatus:
     status: str
@@ -239,7 +244,7 @@ def backend_from_config(config: dict, *, mock_command: list[str] | None = None, 
     harness = config.get("workers", {}).get("harness")
     if backend_name == "mock_subprocess":
         return MockSubprocessBackend(command=mock_command)
-    if backend_name in {"cmux", "cmux_claude"} and harness == "claude":
+    if backend_name in CMUX_BACKENDS and harness == "claude":
         return CmuxClaudeBackend(dry_run=dry_run)
     raise BackendError(f"unsupported worker backend: {backend_name!r} harness={harness!r}")
 
