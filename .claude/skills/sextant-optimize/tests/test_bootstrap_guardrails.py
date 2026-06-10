@@ -302,6 +302,37 @@ class BootstrapGuardrailTests(unittest.TestCase):
             with self.assertRaises(bootstrap.BootstrapError):
                 bootstrap.fetch_usage_snapshot(config, repo_root=root, runner=failed_payload_runner)
 
+    def test_parse_usage_payload_extracts_optional_five_hour_window(self):
+        payload = {
+            "seven_day": {
+                "utilization": 4.0,
+                "resets_at": "2026-06-10T16:59:59.930251+00:00",
+            },
+            "five_hour": {
+                "utilization": 27.0,
+                "resets_at": "2026-06-10T02:49:59.930229+00:00",
+            },
+        }
+
+        snapshot = fetch_usage.parse_usage_payload(payload)
+
+        self.assertEqual(snapshot["sevenDay"], 4.0)
+        self.assertEqual(snapshot["fiveHour"], 27.0)
+        self.assertEqual(snapshot["fiveHourResetsAt"], "2026-06-10T02:49:59.930229+00:00")
+
+    def test_parse_usage_payload_without_five_hour_keeps_seven_day_only(self):
+        payload = {
+            "seven_day": {
+                "utilization": 12.5,
+            },
+        }
+
+        snapshot = fetch_usage.parse_usage_payload(payload)
+
+        self.assertEqual(snapshot["sevenDay"], 12.5)
+        self.assertNotIn("fiveHour", snapshot)
+        self.assertNotIn("fiveHourResetsAt", snapshot)
+
     def test_fetch_usage_oauth_path_reads_keychain_and_usage_api(self):
         with tempfile.TemporaryDirectory() as temp:
             original_cache = fetch_usage.TOKEN_CACHE

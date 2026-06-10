@@ -32,7 +32,18 @@ def parse_usage_payload(payload: dict) -> dict:
         value = payload["seven_day"].get("utilization")
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise ValueError("usage payload must include numeric sevenDay")
-    return {"sevenDay": float(value)}
+    snapshot = {
+        "sevenDay": float(value),
+    }
+    five_hour = payload.get("five_hour")
+    if isinstance(five_hour, dict):
+        utilization = five_hour.get("utilization")
+        if isinstance(utilization, (int, float)) and not isinstance(utilization, bool):
+            snapshot["fiveHour"] = float(utilization)
+        resets_at = five_hour.get("resets_at")
+        if isinstance(resets_at, str) and resets_at:
+            snapshot["fiveHourResetsAt"] = resets_at
+    return snapshot
 
 
 def _read_cached_token(now: float | None = None) -> str | None:
