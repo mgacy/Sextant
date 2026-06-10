@@ -273,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
                 expected_revision=args.expect_revision,
                 worker_backend=worker_backend,
             )
-    except (PollError, backend.BackendError, worker_ops.WorkerError, state_ops.StateError, OSError, json.JSONDecodeError) as error:
+    except (PollError, backend.BackendError, worker_ops.WorkerError, state_ops.StateError, KeyError, OSError, json.JSONDecodeError) as error:
         print(f"poll operation failed: {error}", file=sys.stderr)
         return 2
 

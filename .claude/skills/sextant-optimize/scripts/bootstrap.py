@@ -302,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=canonical_path(args.repo_root),
             skip_prerequisites=args.skip_prerequisites,
         )
-    except (BootstrapError, PathSafetyError, OSError, json.JSONDecodeError) as error:
+    except (BootstrapError, PathSafetyError, KeyError, OSError, json.JSONDecodeError) as error:
         print(f"bootstrap failed: {error}", file=sys.stderr)
         return 2
 

@@ -562,8 +562,10 @@ class WorkerLifecycleTests(unittest.TestCase):
             self.assertFalse(clean["dirty"])
 
             def failed_runner(argv, **kwargs):
-                if argv[:3] == ["git", "status", "--porcelain"]:
+                if argv[:3] == ["git", "status", "--porcelain"] and kwargs.get("cwd") == str(fixture.target_root.resolve()):
                     return completed(argv, returncode=128, stderr="not a git repo")
+                if argv[:3] == ["git", "status", "--porcelain"]:
+                    return completed(argv, stdout="")
                 return completed(argv, returncode=99)
 
             failed = poll.capture_post_run_diff_status(
@@ -572,6 +574,8 @@ class WorkerLifecycleTests(unittest.TestCase):
                 runner=failed_runner,
             )
             self.assertTrue(failed["failed"])
+            self.assertFalse(failed["repos"]["tool"]["failed"])
+            self.assertTrue(failed["repos"]["target"]["failed"])
 
     def test_completion_signal_rejects_artifact_escape(self):
         with tempfile.TemporaryDirectory() as temp:

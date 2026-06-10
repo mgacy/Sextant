@@ -45,6 +45,11 @@ QUALITY_PENALTIES = {
     "invalid": 10,
 }
 
+# Relative per-event cost of each friction category: 2 for categories that
+# force extra round-trips or wrong answers (fallback search, failed attempts,
+# missing context, interface mismatch, truncation), 1 for cheaper annoyances
+# (manual filtering, large output, docs gaps, tool-user unfamiliarity), and 0
+# for friction Sextant was never expected to absorb.
 CATEGORY_WEIGHTS = {
     "fallbackSearch": 2,
     "failedAttempt": 2,
@@ -235,6 +240,8 @@ def score_task(metric: dict, events: list[dict] | None = None, new_friction_even
         **counts,
         "newFrictionEvents": new_events,
         "eventFrictionScore": event_score,
+        # Diagnostic only: answer quality gates evaluationInvalid in
+        # aggregate_tasks and does not contribute to frictionScore.
         "qualityPenaltyDiagnostic": QUALITY_PENALTIES[quality],
         "frictionScore": friction_score,
         "previousFrictionScore": previous,

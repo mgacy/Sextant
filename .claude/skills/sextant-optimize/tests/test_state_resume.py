@@ -118,6 +118,13 @@ class RunFixture:
 
 
 class StateOperationTests(unittest.TestCase):
+    def test_initialize_state_rejects_second_bootstrap(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = RunFixture(temp)
+
+            with self.assertRaisesRegex(state_ops.StateError, "state already exists"):
+                state_ops.initialize_state(fixture.run_dir, fixture.state())
+
     def test_atomic_write_replaces_state_and_removes_temp_file(self):
         with tempfile.TemporaryDirectory() as temp:
             fixture = RunFixture(temp)
@@ -217,6 +224,14 @@ class StateOperationTests(unittest.TestCase):
 
             self.assertEqual(state["iterations"][0]["scorecard"], "iteration-1/evaluator/scorecard.json")
 
+            with self.assertRaisesRegex(state_ops.StateError, "already recorded"):
+                state_ops.record_iteration_result(
+                    fixture.run_dir,
+                    expected_revision=state["revision"],
+                    iteration=1,
+                    scorecard_path="iteration-1/evaluator/scorecard.json",
+                )
+
     def test_state_ops_cli_records_decision_iteration_and_starts_rerun(self):
         with tempfile.TemporaryDirectory() as temp:
             fixture = RunFixture(temp)
@@ -252,6 +267,42 @@ class StateOperationTests(unittest.TestCase):
                     "iteration-1/evaluator/scorecard.json",
                 ])
             self.assertEqual(iteration_result, 0)
+
+            state = state_ops.transition_status(
+                fixture.run_dir, expected_revision=3, new_status="handoffReady"
+            )
+            state = state_ops.transition_status(
+                fixture.run_dir,
+                expected_revision=state["revision"],
+                new_status="waitingForExternalChange",
+            )
+            state = state_ops.mark_ready_for_rerun(
+                fixture.run_dir,
+                expected_revision=state["revision"],
+                external_change={
+                    "ref": "commit:def456",
+                },
+            )
+            tool_state_path = fixture.run_dir / "tool-state.json"
+            write_json(tool_state_path, {
+                "gitCommit": "def456",
+                "version": "0.2.0",
+                "smokeTestPassed": True,
+            })
+            with redirect_stdout(StringIO()):
+                rerun_result = state_ops.main([
+                    "--run",
+                    str(fixture.run_dir),
+                    "--expect-revision",
+                    str(state["revision"]),
+                    "start-rerun",
+                    "--tool-state",
+                    str(tool_state_path),
+                ])
+            self.assertEqual(rerun_result, 0)
+            final = fixture.state()
+            self.assertEqual(final["status"], "running")
+            self.assertEqual(final["currentIteration"], 2)
 
 
 class ResumeFlowTests(unittest.TestCase):

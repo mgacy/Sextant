@@ -24,6 +24,18 @@ class BackendError(RuntimeError):
 CMUX_BACKENDS = frozenset(("cmux", "cmux_claude"))
 
 
+# Canonical role -> required artifacts table. It lives here (not worker_ops)
+# so the embedded mock worker can serialize it without a circular import;
+# worker_ops re-exports it for signal validation.
+ROLE_REQUIRED_ARTIFACTS = {
+    "tool-user": ["report.md", "transcript-ref.json", "transcript-summary.json"],
+    "friction-miner": ["friction-events.json", "report.md"],
+    "evaluator": ["evaluation.md", "scorecard.json"],
+    "opportunity-generator": ["candidates.md", "prioritized.json"],
+    "critic": ["critique.md", "perturbation.md"],
+}
+
+
 @dataclass(frozen=True)
 class WorkerStatus:
     status: str
@@ -259,13 +271,7 @@ output_dir = Path(os.environ["SEXTANT_WORKER_OUTPUT_DIR"])
 output_rel = os.environ["SEXTANT_WORKER_OUTPUT_REL"]
 signal_path = Path(os.environ["SEXTANT_WORKER_SIGNAL_PATH"])
 role = os.environ["SEXTANT_WORKER_ROLE"]
-required = {
-    "tool-user": ["report.md", "transcript-ref.json", "transcript-summary.json"],
-    "friction-miner": ["friction-events.json", "report.md"],
-    "evaluator": ["evaluation.md", "scorecard.json"],
-    "opportunity-generator": ["candidates.md", "prioritized.json"],
-    "critic": ["critique.md", "perturbation.md"],
-}.get(role, ["report.md"])
+required = __ROLE_REQUIRED_ARTIFACTS__.get(role, ["report.md"])
 for name in required:
     path = output_dir / name
     if path.exists():
@@ -284,4 +290,5 @@ signal = {
 signal_path.write_text(json.dumps(signal), encoding="utf-8")
 print("mock worker completed")
 """
+    code = code.replace("__ROLE_REQUIRED_ARTIFACTS__", json.dumps(ROLE_REQUIRED_ARTIFACTS))
     return [sys.executable, "-c", code]

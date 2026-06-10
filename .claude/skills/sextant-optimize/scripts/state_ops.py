@@ -226,6 +226,9 @@ def record_iteration_result(
             raise InvalidTransitionError("iteration recording requires running state")
         if iteration != state.get("currentIteration"):
             raise StateError("can only record the current iteration")
+        for existing in state.get("iterations", []):
+            if existing.get("iteration") == iteration and "scorecard" in existing:
+                raise StateError(f"iteration {iteration} result is already recorded")
         scorecard = artifact_path(run_dir, scorecard_path)
         if not scorecard.is_file():
             raise StateError(f"scorecard does not exist: {scorecard_path}")
@@ -342,7 +345,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             raise StateError(f"unsupported command: {args.command}")
-    except (StateError, PathSafetyError, OSError, json.JSONDecodeError) as error:
+    except (StateError, PathSafetyError, KeyError, OSError, json.JSONDecodeError) as error:
         print(f"state mutation failed: {error}", file=sys.stderr)
         return 2
 

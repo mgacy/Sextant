@@ -26,13 +26,7 @@ ROLE_TEMPLATES = {
     "critic": "critic.md",
 }
 
-ROLE_REQUIRED_ARTIFACTS = {
-    "tool-user": ["report.md", "transcript-ref.json", "transcript-summary.json"],
-    "friction-miner": ["friction-events.json", "report.md"],
-    "evaluator": ["evaluation.md", "scorecard.json"],
-    "opportunity-generator": ["candidates.md", "prioritized.json"],
-    "critic": ["critique.md", "perturbation.md"],
-}
+ROLE_REQUIRED_ARTIFACTS = backend.ROLE_REQUIRED_ARTIFACTS
 
 
 def worker_id_for(role: str, iteration: int, ordinal: int = 1) -> str:
@@ -303,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
                 expected_revision=args.expect_revision,
                 worker_backend=worker_backend,
             )
-    except (WorkerError, state_ops.StateError, PathSafetyError, OSError, json.JSONDecodeError, backend.BackendError) as error:
+    except (WorkerError, state_ops.StateError, PathSafetyError, KeyError, OSError, json.JSONDecodeError, backend.BackendError) as error:
         print(f"worker operation failed: {error}", file=sys.stderr)
         return 2
 

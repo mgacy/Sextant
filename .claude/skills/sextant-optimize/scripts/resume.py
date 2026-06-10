@@ -96,8 +96,9 @@ def resume_after_external_change(
             external_change=external_change,
         )
     except Exception:
-        if iteration_dir.exists():
-            shutil.rmtree(iteration_dir)
+        # Best-effort cleanup; never let an rmtree failure replace the
+        # original error.
+        shutil.rmtree(iteration_dir, ignore_errors=True)
         raise
     return {
         "state": ready_state,
