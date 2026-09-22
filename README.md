@@ -62,6 +62,19 @@ sextant overview Sources/SextantLib/FileParser.swift
 ]
 ```
 
+An attribute's arguments are kept as raw source text in `attributeArguments`, parallel to `attributes` — `null` for an attribute written without parentheses. The key is omitted when no attribute has arguments.
+
+```json
+{
+  "name": "mixed",
+  "kind": "function",
+  "line": 23,
+  "attributes": ["@MainActor", "@available"],
+  "attributeArguments": [null, "iOS 17, *"],
+  "fullDeclaration": "func mixed()"
+}
+```
+
 ### `lookup` — Symbol search
 
 Find symbols by name across a directory tree, with an optional kind filter.
@@ -181,7 +194,7 @@ let refs = try await parser.findReferences(to: "State", in: "Sources/")
 | `SymbolTable` | In-memory index for fast name-based lookup with optional kind filter. |
 | `StructuralQuery` | Regex-based enum case search and symbol-by-kind filtering. |
 | `ReferenceMatch` | A type reference found in a declaration-level position, with location and context. |
-| `Declaration` | A single declaration node with name, kind, line, attributes, conformances, and children. |
+| `Declaration` | A single declaration node with name, kind, line, attributes and their arguments, conformances, and children. |
 | `FileOverview` | Top-level declarations for a file. |
 | `SymbolEntry` | A flattened symbol record for index lookups. |
 
