@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mgacy/swift-version-file-plugin.git",
       "state" : {
-        "revision" : "23349c4f7c66eed19dee3cccd186e131eebc503f",
-        "version" : "0.2.1"
+        "revision" : "a4f5882c4ecb8747234e349948b7984b967296de",
+        "version" : "0.3.0"
       }
     }
   ],
