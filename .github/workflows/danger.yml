@@ -27,6 +27,6 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Danger
-        uses: 417-72KI/danger-swiftlint@v6.3
+        uses: 417-72KI/danger-swiftlint@v6.4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
