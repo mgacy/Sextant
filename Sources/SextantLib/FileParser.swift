@@ -164,6 +164,7 @@ private extension FileParser {
             kind: .struct,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: extractInheritance(from: node.inheritanceClause),
             children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
@@ -181,10 +182,8 @@ private extension FileParser {
             guard let caseDecl = member.decl.as(EnumCaseDeclSyntax.self) else { continue }
 
             // Attributes live on EnumCaseDeclSyntax, propagate to each element
-            let caseAttributes = caseDecl.attributes.compactMap { element in
-                guard let attr = element.as(AttributeSyntax.self) else { return nil as String? }
-                return "@\(attr.attributeName.trimmedDescription)"
-            }
+            let caseAttributes = extractAttributes(from: caseDecl)
+            let caseAttributeArguments = extractAttributeArguments(from: caseDecl)
 
             for element in caseDecl.elements {
                 let caseName = element.name.text
@@ -208,6 +207,7 @@ private extension FileParser {
                     kind: .case,
                     line: lineNumber(for: element, converter: converter),
                     attributes: caseAttributes,
+                    attributeArguments: caseAttributeArguments,
                     conformances: [],
                     children: [],
                     associatedValues: associatedValueStrings,
@@ -225,6 +225,7 @@ private extension FileParser {
             kind: .enum,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: extractInheritance(from: node.inheritanceClause),
             children: children
         )
@@ -240,6 +241,7 @@ private extension FileParser {
             kind: .class,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: extractInheritance(from: node.inheritanceClause),
             children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
@@ -255,6 +257,7 @@ private extension FileParser {
             kind: .protocol,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: extractInheritance(from: node.inheritanceClause),
             children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
@@ -269,6 +272,7 @@ private extension FileParser {
             kind: .typealias,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: []
         )
     }
@@ -283,6 +287,7 @@ private extension FileParser {
             kind: .extension,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: extractInheritance(from: node.inheritanceClause),
             children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
@@ -298,6 +303,7 @@ private extension FileParser {
             kind: .actor,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: extractInheritance(from: node.inheritanceClause),
             children: extractChildren(from: node.memberBlock, file: file, converter: converter)
         )
@@ -346,6 +352,7 @@ private extension FileParser {
             kind: .function,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: [],
             fullDeclaration: decl
         )
@@ -383,6 +390,7 @@ private extension FileParser {
             kind: .variable,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: [],
             fullDeclaration: decl
         )
@@ -425,6 +433,7 @@ private extension FileParser {
             kind: .initializer,
             line: lineNumber(for: node, converter: converter),
             attributes: extractAttributes(from: node),
+            attributeArguments: extractAttributeArguments(from: node),
             conformances: [],
             fullDeclaration: decl
         )
@@ -476,10 +485,21 @@ private extension FileParser {
     /// - Parameter node: A syntax node with attributes (e.g., `StructDeclSyntax`, `FunctionDeclSyntax`).
     /// - Returns: An array of attribute strings prefixed with `@` (e.g., `["@Reducer", "@MainActor"]`).
     func extractAttributes(from node: some WithAttributesSyntax) -> [String] {
-        node.attributes.compactMap { element in
-            guard let attr = element.as(AttributeSyntax.self) else { return nil }
-            return "@\(attr.attributeName.trimmedDescription)"
-        }
+        attributeSyntaxes(of: node).map { "@\($0.attributeName.trimmedDescription)" }
+    }
+
+    /// Extracts the raw argument text of each attribute, parallel to `extractAttributes(from:)`.
+    ///
+    /// - Parameter node: A syntax node with attributes (e.g., `StructDeclSyntax`, `FunctionDeclSyntax`).
+    /// - Returns: The source between each attribute's parentheses (e.g., `"Fetches a user", .disabled("flaky")`),
+    ///   or `nil` for an attribute written without them.
+    func extractAttributeArguments(from node: some WithAttributesSyntax) -> [String?] {
+        attributeSyntaxes(of: node).map { $0.arguments?.trimmedDescription }
+    }
+
+    /// The attributes applied to a node, skipping `#if` clauses in its attribute list.
+    func attributeSyntaxes(of node: some WithAttributesSyntax) -> [AttributeSyntax] {
+        node.attributes.compactMap { $0.as(AttributeSyntax.self) }
     }
 
     /// Extracts inherited type names from an inheritance clause.

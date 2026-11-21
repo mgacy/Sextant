@@ -54,9 +54,29 @@ struct CompactEncodingTests {
         let json = String(data: data, encoding: .utf8)!
 
         #expect(json.contains("\"attributes\""))
+        #expect(!json.contains("\"attributeArguments\""))
         #expect(json.contains("\"conformances\""))
         #expect(!json.contains("\"children\""))
         #expect(!json.contains("\"fullDeclaration\""))
+    }
+
+    @Test("Declaration round-trips attribute arguments, encoding a missing argument as null")
+    func declarationRoundTripsAttributeArguments() throws {
+        let decl = Declaration(
+            name: "mixed",
+            kind: .function,
+            line: 3,
+            attributes: ["@MainActor", "@available"],
+            attributeArguments: [nil, "iOS 17, *"]
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(decl)
+        let json = String(data: data, encoding: .utf8)!
+
+        #expect(json.contains(#""attributeArguments":[null,"iOS 17, *"]"#))
+        #expect(try JSONDecoder().decode(Declaration.self, from: data) == decl)
     }
 
     @Test("Declaration decodes from compact JSON with missing keys")
@@ -71,6 +91,7 @@ struct CompactEncodingTests {
         #expect(decl.kind == .function)
         #expect(decl.line == 1)
         #expect(decl.attributes.isEmpty)
+        #expect(decl.attributeArguments.isEmpty)
         #expect(decl.conformances.isEmpty)
         #expect(decl.children.isEmpty)
         #expect(decl.associatedValues.isEmpty)

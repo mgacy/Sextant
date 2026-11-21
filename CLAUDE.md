@@ -52,7 +52,7 @@ Uses swift-argument-parser with four subcommands:
 
 ### Test Fixtures
 
-Tests use `.swift` fixture files in `Tests/SextantTests/Fixtures/` loaded via `Bundle.module`. Test suites: `FileParserTests`, `StructuralQueryTests`, `SymbolTableTests`, `ReferenceFinderTests`, `CompactEncodingTests`, `ConcurrencyTests`, `ExtensionActorInitializerTests`, `FileScannerTests`, `FullDeclarationTests`.
+Tests use `.swift` fixture files in `Tests/SextantTests/Fixtures/` loaded via `Bundle.module`. Test suites: `FileParserTests`, `AttributeArgumentsTests`, `StructuralQueryTests`, `SymbolTableTests`, `ReferenceFinderTests`, `CompactEncodingTests`, `ConcurrencyTests`, `ExtensionActorInitializerTests`, `FileScannerTests`, `FullDeclarationTests`.
 
 ## Key Dependencies
 
